@@ -1,8 +1,8 @@
 /*
- * atheme-services: A collection of minimalist IRC services   
+ * atheme-services: A collection of minimalist IRC services
  * channels.c: Channel event and state tracking
  *
- * Copyright (c) 2005-2007 Atheme Project (http://www.atheme.org)           
+ * Copyright (c) 2005-2007 Atheme Project (http://www.atheme.org)
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -85,9 +85,9 @@ channel_t *channel_add(const char *name, time_t ts, server_t *creator)
 	channel_t *c;
 	mychan_t *mc;
 
-	if (*name != '#')
+	if (!VALID_GLOBAL_CHANNEL_PFX(name))
 	{
-		slog(LG_DEBUG, "channel_add(): got non #channel: %s", name);
+		slog(LG_DEBUG, "channel_add(): got channel with invalid global prefix: %s", name);
 		return NULL;
 	}
 
@@ -157,7 +157,7 @@ void channel_delete(channel_t *c)
 	return_if_fail(c != NULL);
 
 	slog(LG_DEBUG, "channel_delete(): %s", c->name);
-	
+
 	modestack_finalize_channel(c);
 
 	/* If this is called from uplink_close(), there may still be services
@@ -174,6 +174,7 @@ void channel_delete(channel_t *c)
 		cnt.chanuser--;
 	}
 	c->nummembers = 0;
+	c->numsvcmembers = 0;
 
 	hook_call_channel_delete(c);
 
@@ -354,9 +355,9 @@ chanuser_t *chanuser_add(channel_t *chan, const char *nick)
 	return_val_if_fail(chan->name != NULL, NULL);
 	return_val_if_fail(nick != NULL, NULL);
 
-	if (*chan->name != '#')
+	if (!VALID_GLOBAL_CHANNEL_PFX(chan->name))
 	{
-		slog(LG_DEBUG, "chanuser_add(): got non #channel: %s", chan->name);
+		slog(LG_DEBUG, "chanuser_add(): got an invalid global channel prefix: %s", chan->name);
 		return NULL;
 	}
 
@@ -400,6 +401,8 @@ chanuser_t *chanuser_add(channel_t *chan, const char *nick)
 	cu->modes = flags;
 
 	chan->nummembers++;
+	if (is_internal_client(u))
+		chan->numsvcmembers++;
 
 	mowgli_node_add(cu, &cu->cnode, &chan->members);
 	mowgli_node_add(cu, &cu->unode, &u->channels);
@@ -458,6 +461,9 @@ void chanuser_delete(channel_t *chan, user_t *user)
 
 	chan->nummembers--;
 	cnt.chanuser--;
+
+	if (is_internal_client(user))
+		chan->numsvcmembers--;
 
 	if (chan->nummembers == 0 && !(chan->modes & ircd->perm_mode))
 	{

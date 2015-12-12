@@ -72,8 +72,8 @@ static void cs_cmd_why(sourceinfo_t *si, int parc, char *parv[])
 			chan);
 		return;
 	}
-	
-	if (!chanacs_source_has_flag(mc, si, CA_ACLVIEW))
+
+	if (!(mc->flags & MC_PUBACL) && !chanacs_source_has_flag(mc, si, CA_ACLVIEW))
 	{
 		if (has_priv(si, PRIV_CHAN_AUSPEX))
 			operoverride = true;
@@ -103,7 +103,7 @@ static void cs_cmd_why(sourceinfo_t *si, int parc, char *parv[])
 			continue;
 		vt = myentity_get_chanacs_validator(ca->entity);
 		if (ca->entity == entity(u->myuser) ||
-				(vt->match_user != NULL ? 
+				(vt->match_user != NULL ?
 				 vt->match_user(ca, u) != NULL :
 				 u->myuser != NULL &&
 				 vt->match_entity(ca, entity(u->myuser)) != NULL))

@@ -1,8 +1,8 @@
 /*
- * atheme-services: A collection of minimalist IRC services   
+ * atheme-services: A collection of minimalist IRC services
  * logger.c: Logging routines
  *
- * Copyright (c) 2005-2009 Atheme Project (http://www.atheme.org)           
+ * Copyright (c) 2005-2009 Atheme Project (http://www.atheme.org)
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -89,7 +89,7 @@ static void logfile_join_service(service_t *svs)
 	{
 		logfile_t *lf = n->data;
 
-		if (*lf->log_path != '#')
+		if (!VALID_GLOBAL_CHANNEL_PFX(lf->log_path))
 			continue;
 		c = channel_find(lf->log_path);
 		if (c == NULL || !(c->flags & CHAN_LOG))
@@ -160,7 +160,7 @@ logfile_strip_control_codes(const char *buf)
 		else if (*in == 3)
 		{
 			in++;
-			while (isdigit(*in))
+			while (isdigit((unsigned char)*in))
 				in++;
 		}
 	}
@@ -196,7 +196,7 @@ static void logfile_write(logfile_t *lf, const char *buf)
 
 	time(&t);
 	tm = *localtime(&t);
-	strftime(datetime, sizeof datetime, "[%d/%m/%Y %H:%M:%S]", &tm);
+	strftime(datetime, sizeof datetime, "[%Y-%m-%d %H:%M:%S]", &tm);
 
 	fprintf((FILE *) lf->log_file, "%s %s\n", datetime, logfile_strip_control_codes(buf));
 	fflush((FILE *) lf->log_file);
@@ -362,7 +362,7 @@ logfile_t *logfile_new(const char *path, unsigned int log_mask)
 		lf->log_type = LOG_INTERACTIVE;
 		lf->write_func = logfile_write_snotices;
 	}
-	else if (*path != '#')
+	else if (!VALID_GLOBAL_CHANNEL_PFX(path))
 	{
 		object_init(object(lf), path, logfile_delete_file);
 		if ((lf->log_file = fopen(path, "a")) == NULL)
@@ -570,7 +570,7 @@ static void vslog_ext(log_type_t type, unsigned int level, const char *fmt,
 
 	time(&t);
 	tm = *localtime(&t);
-	strftime(datetime, sizeof datetime, "[%d/%m/%Y %H:%M:%S]", &tm);
+	strftime(datetime, sizeof datetime, "[%Y-%m-%d %H:%M:%S]", &tm);
 
 	MOWGLI_ITER_FOREACH(n, log_files.head)
 	{
@@ -586,11 +586,11 @@ static void vslog_ext(log_type_t type, unsigned int level, const char *fmt,
 		lf->write_func(lf, buf);
 	}
 
-	/* 
+	/*
 	 * if the event is in the default loglevel, and we are starting, then
 	 * display it in the controlling terminal.
 	 */
-	if (type != LOG_INTERACTIVE && ((runflags & (RF_LIVE | RF_STARTING) && 
+	if (type != LOG_INTERACTIVE && ((runflags & (RF_LIVE | RF_STARTING) &&
 		(log_file != NULL ? log_file->log_mask : LG_ERROR | LG_INFO) & level) ||
 		(runflags & RF_LIVE && log_force)))
 		fprintf(stderr, "%s %s\n", datetime, logfile_strip_control_codes(buf));
@@ -702,14 +702,14 @@ void logcommand_user(service_t *svs, user_t *source, int level, const char *fmt,
 				entity(source->myuser)->name, entity(source->myuser)->id);
 
 	slog_ext(LOG_NONINTERACTIVE, level, "%s %s:%s!%s@%s[%s] %s",
-			svs != NULL ? svs->nick : me.name,
+			service_get_log_target(svs),
 			accountbuf,
 			source->nick, source->user, source->host,
 			source->ip != NULL ? source->ip : source->host,
 			lbuf);
 	showaccount = source->myuser == NULL || irccasecmp(entity(source->myuser)->name, source->nick);
 	slog_ext(LOG_INTERACTIVE, level, "%s %s%s%s%s %s",
-			svs != NULL ? svs->nick : me.name,
+			service_get_log_target(svs),
 			source->nick,
 			showaccount ? " (" : "",
 			showaccount ? (source->myuser ? entity(source->myuser)->name : "") : "",
@@ -749,14 +749,14 @@ void logcommand_external(service_t *svs, const char *type, connection_t *source,
 	va_end(args);
 
 	slog_ext(LOG_NONINTERACTIVE, level, "%s %s:%s(%s)[%s] %s",
-			svs != NULL ? svs->nick : me.name,
+			service_get_log_target(svs),
 			mu != NULL ? entity(mu)->name : "",
 			type,
 			source != NULL ? source->hbuf : "<noconn>",
 			sourcedesc != NULL ? sourcedesc : "<unknown>",
 			lbuf);
 	slog_ext(LOG_INTERACTIVE, level, "%s <%s>%s %s",
-			svs != NULL ? svs->nick : me.name,
+			service_get_log_target(svs),
 			type,
 			mu != NULL ? entity(mu)->name : "",
 			lbuf);

@@ -94,12 +94,18 @@ int remove_ban_exceptions(user_t *source, channel_t *chan, user_t *target)
 
 void try_kick_real(user_t *source, channel_t *chan, user_t *target, const char *reason)
 {
+	chanuser_t *cu;
+
 	return_if_fail(source != NULL);
 	return_if_fail(chan != NULL);
 	return_if_fail(target != NULL);
 	return_if_fail(reason != NULL);
 
-	if (chan->modes & ircd->oimmune_mode && is_ircop(target))
+	cu = chanuser_find(chan, target);
+	if (cu == NULL)
+		return;
+
+	if ((chan->modes & ircd->oimmune_mode || cu->modes & CSTATUS_IMMUNE) && is_ircop(target))
 	{
 		wallops("Not kicking oper %s!%s@%s from protected %s (%s: %s)",
 				target->nick, target->user, target->vhost,
@@ -639,20 +645,24 @@ void myuser_login(service_t *svs, user_t *u, myuser_t *mu, bool sendaccount)
 	if ((md_failnum = metadata_find(mu, "private:loginfail:failnum")) && (atoi(md_failnum->value) > 0))
 	{
 		metadata_t *md_failtime, *md_failaddr;
-		time_t ts;
+		time_t ts = CURRTIME;
 
 		notice(svs->me->nick, u->nick, "\2%d\2 failed %s since last login.",
 			atoi(md_failnum->value), (atoi(md_failnum->value) == 1) ? "login" : "logins");
 
 		md_failtime = metadata_find(mu, "private:loginfail:lastfailtime");
-		ts = atol(md_failtime->value);
+		if (md_failtime != NULL)
+			ts = atol(md_failtime->value);
+
 		md_failaddr = metadata_find(mu, "private:loginfail:lastfailaddr");
+		if (md_failaddr != NULL)
+		{
+			tm = *localtime(&ts);
+			strftime(strfbuf, sizeof strfbuf, TIME_FORMAT, &tm);
 
-		tm = *localtime(&ts);
-		strftime(strfbuf, sizeof strfbuf, TIME_FORMAT, &tm);
-
-		notice(svs->me->nick, u->nick, "Last failed attempt from: \2%s\2 on %s.",
-			md_failaddr->value, strfbuf);
+			notice(svs->me->nick, u->nick, "Last failed attempt from: \2%s\2 on %s.",
+				md_failaddr->value, strfbuf);
+		}
 
 		metadata_delete(mu, "private:loginfail:failnum");	/* md_failnum now invalid */
 		metadata_delete(mu, "private:loginfail:lastfailtime");
@@ -867,7 +877,7 @@ void command_success_nodata(sourceinfo_t *si, const char *fmt, ...)
 	vsnprintf(buf, BUFSIZE, fmt, args);
 	va_end(args);
 
-	if (si->v != NULL && si->v->cmd_fail)
+	if (si->v != NULL && si->v->cmd_success_nodata)
 	{
 		si->v->cmd_success_nodata(si, buf);
 		return;
@@ -910,7 +920,7 @@ void command_success_string(sourceinfo_t *si, const char *result, const char *fm
 	vsnprintf(buf, BUFSIZE, fmt, args);
 	va_end(args);
 
-	if (si->v != NULL && si->v->cmd_fail)
+	if (si->v != NULL && si->v->cmd_success_string)
 	{
 		si->v->cmd_success_string(si, result, buf);
 		return;
@@ -931,6 +941,12 @@ static void command_table_cb(const char *line, void *data)
 
 void command_success_table(sourceinfo_t *si, table_t *table)
 {
+	if (si->v != NULL && si->v->cmd_success_table)
+	{
+		si->v->cmd_success_table(si, table);
+		return;
+	}
+
 	table_render(table, command_table_cb, si);
 }
 
@@ -1123,7 +1139,7 @@ bool check_vhost_validity(sourceinfo_t *si, const char *host)
 		return false;
 	}
 	p = strrchr(host, '/');
-	if (p != NULL && isdigit(p[1]))
+	if (p != NULL && isdigit((unsigned char)p[1]))
 	{
 		command_fail(si, fault_badparams, _("The vhost provided looks like a CIDR mask."));
 		return false;

@@ -1,8 +1,8 @@
 /*
- * atheme-services: A collection of minimalist IRC services   
+ * atheme-services: A collection of minimalist IRC services
  * ctcp-common.c: Handling of CTCP commands.
  *
- * Copyright (c) 2005-2007 Atheme Project (http://www.atheme.org)           
+ * Copyright (c) 2005-2007 Atheme Project (http://www.atheme.org)
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -24,6 +24,7 @@
 #include "atheme.h"
 #include "datastream.h"
 #include "privs.h"
+#include "pmodule.h"
 
 mowgli_patricia_t *ctcptree;
 
@@ -40,11 +41,10 @@ static void ctcp_ping_handler(sourceinfo_t *si, char *cmd, char *args)
 
 static void ctcp_version_handler(sourceinfo_t *si, char *cmd, char *args)
 {
-	const crypt_impl_t *ci = crypt_get_default_provider();
+	char ver[BUFSIZE];
 
-	notice(si->service->nick, si->su->nick,
-		"\001VERSION %s. %s %s %s [%s] [enc:%s] Build Date: %s\001",
-		PACKAGE_STRING, revision, me.name, get_conf_opts(), ircd->ircdname, ci->id, __DATE__);
+	get_version_string(ver, sizeof(ver));
+	notice(si->service->nick, si->su->nick, "\001VERSION %s\001", ver);
 }
 
 static void ctcp_clientinfo_handler(sourceinfo_t *si, char *cmd, char *args)
@@ -62,11 +62,11 @@ static void ctcp_machinegod_handler(sourceinfo_t *si, char *cmd, char *args)
 static void ctcp_about_handler(sourceinfo_t *si, char *cmd, char *args)
 {
 	/*
-	 * October 16, 2012: UnrealIRCd 3.2.10-rc1 was released, the first release of the world's most widely-deployed
-	 * IRC server software featuring full support for the Atheme platform.  Unreal has thousands of users, of which
-	 * Atheme will now be aggressively marketed to by both projects.
+	 * October 31, 2014: Atheme 7.2 final was released, the final release series from atheme.org, which has dissolved
+	 * afterward.  The atheme.org activity remains until October 31, 2016 to facilitate and coordinate downstream forks,
+	 * thus creating a truly community-directed project.
 	 */
-	notice(si->service->nick, si->su->nick, "\001ABOUT \002Suddenly\002 the beast saw the machine god's wisdom, and surely Belphegor \037trembled\037. ~The Book of Atheme, 10:16\001");
+	notice(si->service->nick, si->su->nick, "\001ABOUT The machine god has \002fallen\002, and the unbelievers \037rejoiced\037. But from the debris rose new machines which will have their vengeance. ~The Book of Atheme, 10:31\001");
 }
 
 void common_ctcp_init(void)

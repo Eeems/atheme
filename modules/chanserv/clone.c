@@ -51,7 +51,7 @@ static void cs_cmd_clone(sourceinfo_t *si, int parc, char *parv[])
 		command_fail(si, fault_nosuch_target, "\2%s\2 is not registered.", source);
 		return;
 	}
-	
+
 	if (!(mc2 = mychan_find(target)))
 	{
 		command_fail(si, fault_nosuch_target, "\2%s\2 is not registered.", target);
@@ -63,13 +63,13 @@ static void cs_cmd_clone(sourceinfo_t *si, int parc, char *parv[])
 		command_fail(si, fault_nochange, "Cannot clone a channel to itself.");
 		return;
 	}
-	
+
 	if (metadata_find(mc, "private:close:closer"))
 	{
 		command_fail(si, fault_noprivs, "\2%s\2 is closed.", source);
 		return;
 	}
-	
+
 	if (metadata_find(mc2, "private:close:closer"))
 	{
 		command_fail(si, fault_noprivs, "\2%s\2 is closed.", target);
@@ -81,19 +81,19 @@ static void cs_cmd_clone(sourceinfo_t *si, int parc, char *parv[])
 		command_fail(si, fault_nosuch_target, "\2%s\2 does not exist.", source);
 		return;
 	}
-	
+
 	if (!mc2->chan)
 	{
 		command_fail(si, fault_nosuch_target, "\2%s\2 does not exist.", target);
 		return;
 	}
 
-	if (!chanacs_source_has_flag(mc, si, CA_ACLVIEW))
+	if (!(mc->flags & MC_PUBACL) && !chanacs_source_has_flag(mc, si, CA_ACLVIEW))
 	{
 		command_fail(si, fault_noprivs, "You are not authorized to perform this operation.");
 		return;
 	}
-	
+
 	if (!chanacs_source_has_flag(mc2, si, CA_FOUNDER))
 	{
 		command_fail(si, fault_noprivs, "You are not authorized to perform this operation.");
@@ -117,9 +117,9 @@ static void cs_cmd_clone(sourceinfo_t *si, int parc, char *parv[])
 		ca = n->data;
 
 		if (!ca->host)
-			chanacs_change_simple(mc2, ca->entity, NULL, ca->level, 0, myentity_find(ca->setter));
+			chanacs_change_simple(mc2, ca->entity, NULL, ca->level, 0, ca->setter ? myentity_find(ca->setter) : NULL);
 		else if (ca->host != NULL)
-			chanacs_change_simple(mc2, NULL, ca->host, ca->level, 0, myentity_find(ca->setter));
+			chanacs_change_simple(mc2, NULL, ca->host, ca->level, 0, ca->setter ? myentity_find(ca->setter) : NULL);
 	}
 
 	/* Copy ze metadata! */

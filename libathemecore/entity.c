@@ -125,7 +125,7 @@ void myentity_foreach_start(myentity_iteration_state_t *state, myentity_type_t t
 	{
 		mowgli_patricia_foreach_next(entities, &state->st);
 		e = mowgli_patricia_foreach_cur(entities, &state->st);
-	} 
+	}
 }
 
 myentity_t *myentity_foreach_cur(myentity_iteration_state_t *state)
@@ -182,9 +182,27 @@ static bool linear_can_register_channel(myentity_t *mt)
 	return has_priv_myuser(mu, PRIV_REG_NOLIMIT);
 }
 
+static bool linear_allow_foundership(myentity_t *mt)
+{
+	myuser_t *mu;
+
+	/* avoid workaround for restricted users where foundership is set on the user after registration. */
+	if ((mu = user(mt)) != NULL)
+	{
+		metadata_t *md;
+
+		md = metadata_find(mu, "private:restrict:setter");
+		if (md != NULL)
+			return false;
+	}
+
+	return true;
+}
+
 entity_chanacs_validation_vtable_t linear_chanacs_validate = {
 	.match_entity = linear_chanacs_match_entity,
 	.can_register_channel = linear_can_register_channel,
+	.allow_foundership = linear_allow_foundership,
 };
 
 entity_chanacs_validation_vtable_t *myentity_get_chanacs_validator(myentity_t *mt)
@@ -222,3 +240,15 @@ bool myentity_can_register_channel(myentity_t *mt)
 	return (myentity_count_channels_with_flagset(mt, CA_FOUNDER) < chansvs.maxchans);
 }
 
+bool myentity_allow_foundership(myentity_t *mt)
+{
+	entity_chanacs_validation_vtable_t *vt;
+
+	return_val_if_fail(mt != NULL, false);
+
+	vt = myentity_get_chanacs_validator(mt);
+	if (vt->allow_foundership)
+		return vt->allow_foundership(mt);
+
+	return false;
+}

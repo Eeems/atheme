@@ -357,7 +357,7 @@ on_channel_message(hook_cmessage_data_t *data)
 	if (cu == NULL)
 		return;
 
-	mc = MYCHAN_FROM(data->c);
+	mc = mychan_from(data->c);
 	if (mc == NULL)
 		return;
 
@@ -408,7 +408,7 @@ cs_set_cmd_antiflood(sourceinfo_t *si, int parc, char *parv[])
 	}
 
 	/* allow opers with PRIV_CHAN_ADMIN to override this setting since it has
-	   oper-specific settings (i.e. AKILL action) */ 
+	   oper-specific settings (i.e. AKILL action) */
 	if (!chanacs_source_has_flag(mc, si, CA_SET) && !has_priv(si, PRIV_CHAN_ADMIN))
 	{
 		command_fail(si, fault_noprivs, _("You are not authorized to perform this command."));
@@ -417,7 +417,7 @@ cs_set_cmd_antiflood(sourceinfo_t *si, int parc, char *parv[])
 
 	if (parv[1] == NULL)
 	{
-		command_fail(si, fault_needmoreparams, STR_INSUFFICIENT_PARAMS, "SET FLOOD");
+		command_fail(si, fault_needmoreparams, STR_INSUFFICIENT_PARAMS, "SET ANTIFLOOD");
 		return;
 	}
 
@@ -432,6 +432,11 @@ cs_set_cmd_antiflood(sourceinfo_t *si, int parc, char *parv[])
 	}
 	else if (!strcasecmp(parv[1], "ON"))
 	{
+		if (MC_ANTIFLOOD & mc->flags)
+		{
+			command_fail(si, fault_nochange, _("The \2%s\2 flag is already set for channel \2%s\2."), "ANTIFLOOD", mc->name);
+			return;
+		}
 		mc->flags |= MC_ANTIFLOOD;
 		metadata_delete(mc, METADATA_KEY_ENFORCE_METHOD);
 

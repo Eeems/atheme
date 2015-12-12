@@ -73,7 +73,7 @@ static void os_help_set(sourceinfo_t *si, const char *subcmd)
 		command_success_nodata(si, _("***** \2End of Help\2 *****"));
 	}
 	else
-		help_display(si, si->service, subcmd, os_set_cmdtree);
+		help_display_as_subcmd(si, si->service, "SET", subcmd, os_set_cmdtree);
 }
 
 /* SET <setting> <parameters> */
@@ -376,7 +376,7 @@ static void os_cmd_set_maxfounders(sourceinfo_t *si, int parc, char *parv[])
 
 	int value = atoi(founders);
 
-	/* Yes, I know how arbitrary the high value is, this is what it is in confprocess.c 
+	/* Yes, I know how arbitrary the high value is, this is what it is in confprocess.c
 	 * (I rounded it down though) -- JD
 	 */
 	if (value < 1 || value > 41)

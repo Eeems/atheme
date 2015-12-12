@@ -18,29 +18,29 @@ DECLARE_MODULE_V1("protocol/ircnet", true, _modinit, NULL, PACKAGE_STRING, "Athe
 /* *INDENT-OFF* */
 
 ircd_t IRCNet = {
-        "ircd 2.11.1p1 or later",       /* IRCd name */
-        "$$",                           /* TLD Prefix, used by Global. */
-        true,                           /* Whether or not we use IRCNet/TS6 UID */
-        false,                          /* Whether or not we use RCOMMAND */
-        false,                          /* Whether or not we support channel owners. */
-        false,                          /* Whether or not we support channel protection. */
-        false,                          /* Whether or not we support halfops. */
-	false,				/* Whether or not we use P10 */
-	false,				/* Whether or not we use vHosts. */
-	0,				/* Oper-only cmodes */
-        0,                              /* Integer flag for owner channel flag. */
-        0,                              /* Integer flag for protect channel flag. */
-        0,                              /* Integer flag for halfops. */
-        "+",                            /* Mode we set for owner. */
-        "+",                            /* Mode we set for protect. */
-        "+",                            /* Mode we set for halfops. */
-	PROTOCOL_IRCNET,		/* Protocol type */
-	0,                              /* Permanent cmodes */
-	0,                              /* Oper-immune cmode */
-	"beIR",                         /* Ban-like cmodes */
-	'e',                            /* Except mchar */
-	'I',                            /* Invex mchar */
-	IRCD_CIDR_BANS                  /* Flags */
+	.ircdname = "ircd 2.11.1p1 or later",
+	.tldprefix = "$$",
+	.uses_uid = true,
+	.uses_rcommand = false,
+	.uses_owner = false,
+	.uses_protect = false,
+	.uses_halfops = false,
+	.uses_p10 = false,
+	.uses_vhost = false,
+	.oper_only_modes = 0,
+	.owner_mode = 0,
+	.protect_mode = 0,
+	.halfops_mode = 0,
+	.owner_mchar = "+",
+	.protect_mchar = "+",
+	.halfops_mchar = "+",
+	.type = PROTOCOL_IRCNET,
+	.perm_mode = 0,
+	.oimmune_mode = 0,
+	.ban_like_modes = "beIR",
+	.except_mchar = 'e',
+	.invex_mchar = 'I',
+	.flags = IRCD_CIDR_BANS,
 };
 
 struct cmode_ ircnet_mode_list[] = {
@@ -126,12 +126,6 @@ static void ircnet_invite_sts(user_t *sender, user_t *target, channel_t *channel
 static void ircnet_quit_sts(user_t *u, const char *reason)
 {
 	sts(":%s QUIT :%s", u->nick, reason);
-}
-
-/* WALLOPS wrapper */
-static void ircnet_wallops_sts(const char *text)
-{
-	sts(":%s WALLOPS :%s", me.name, text);
 }
 
 /* join a channel */
@@ -519,11 +513,11 @@ static void m_nick(sourceinfo_t *si, int parc, char *parv[])
 	/* if it's only 1 then it's a nickname change */
 	else if (parc == 1)
 	{
-                if (!si->su)
-                {       
-                        slog(LG_DEBUG, "m_nick(): server trying to change nick: %s", si->s != NULL ? si->s->name : "<none>");
-                        return;
-                }
+		if (!si->su)
+		{
+			slog(LG_DEBUG, "m_nick(): server trying to change nick: %s", si->s != NULL ? si->s->name : "<none>");
+			return;
+		}
 
 		slog(LG_DEBUG, "m_nick(): nickname change from `%s': %s", si->su->nick, parv[0]);
 
@@ -738,7 +732,6 @@ void _modinit(module_t * m)
 	server_login = &ircnet_server_login;
 	introduce_nick = &ircnet_introduce_nick;
 	quit_sts = &ircnet_quit_sts;
-	wallops_sts = &ircnet_wallops_sts;
 	join_sts = &ircnet_join_sts;
 	kick = &ircnet_kick;
 	msg = &ircnet_msg;

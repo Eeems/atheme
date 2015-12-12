@@ -1,8 +1,8 @@
 /*
- * atheme-services: A collection of minimalist IRC services   
+ * atheme-services: A collection of minimalist IRC services
  * function.c: Miscillaneous functions.
  *
- * Copyright (c) 2005-2007 Atheme Project (http://www.atheme.org)           
+ * Copyright (c) 2005-2007 Atheme Project (http://www.atheme.org)
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -177,18 +177,17 @@ char *time_ago(time_t event)
 	seconds = event;
 
 	if (years)
-		snprintf(ret, sizeof(ret),
-			 "%d year%s, %d week%s, %d day%s, %02d:%02d:%02d", years, years == 1 ? "" : "s", weeks, weeks == 1 ? "" : "s", days, days == 1 ? "" : "s", hours, minutes, seconds);
+		snprintf(ret, sizeof(ret), "%dy %dw %dd", years, weeks, days);
 	else if (weeks)
-		snprintf(ret, sizeof(ret), "%d week%s, %d day%s, %02d:%02d:%02d", weeks, weeks == 1 ? "" : "s", days, days == 1 ? "" : "s", hours, minutes, seconds);
+		snprintf(ret, sizeof(ret), "%dw %dd %dh", weeks, days, hours);
 	else if (days)
-		snprintf(ret, sizeof(ret), "%d day%s, %02d:%02d:%02d", days, days == 1 ? "" : "s", hours, minutes, seconds);
+		snprintf(ret, sizeof(ret), "%dd %dh %dm %ds", days, hours, minutes, seconds);
 	else if (hours)
-		snprintf(ret, sizeof(ret), "%d hour%s, %d minute%s, %d second%s", hours, hours == 1 ? "" : "s", minutes, minutes == 1 ? "" : "s", seconds, seconds == 1 ? "" : "s");
+		snprintf(ret, sizeof(ret), "%dh %dm %ds", hours, minutes, seconds);
 	else if (minutes)
-		snprintf(ret, sizeof(ret), "%d minute%s, %d second%s", minutes, minutes == 1 ? "" : "s", seconds, seconds == 1 ? "" : "s");
+		snprintf(ret, sizeof(ret), "%dm %ds", minutes, seconds);
 	else
-		snprintf(ret, sizeof(ret), "%d second%s", seconds, seconds == 1 ? "" : "s");
+		snprintf(ret, sizeof(ret), "%ds", seconds);
 
 	return ret;
 }
@@ -282,7 +281,7 @@ int validemail(const char *email)
 	/* no mail to IP addresses, this should be done using [10.2.3.4]
 	 * like syntax but we do not allow that either
 	 */
-	if (isdigit(lastdot[1]))
+	if (isdigit((unsigned char)lastdot[1]))
 		return 0;
 
 	/* make sure there are at least 4 characters besides the above
@@ -709,10 +708,14 @@ int sendemail(user_t *u, myuser_t *mu, const char *type, const char *email, cons
 
 	/* now set up the email */
 	if (pipe(pipfds) < 0)
+	{
+		fclose(in);
 		return 0;
+	}
 	switch (pid = fork())
 	{
 		case -1:
+			fclose(in);
 			return 0;
 		case 0:
 			connection_close_all_fds();
@@ -733,8 +736,8 @@ int sendemail(user_t *u, myuser_t *mu, const char *type, const char *email, cons
 		replace(buf, sizeof buf, "&to&", to);
 		replace(buf, sizeof buf, "&replyto&", me.adminemail);
 		replace(buf, sizeof buf, "&date&", date);
-		replace(buf, sizeof buf, "&accountname&", mu != NULL ? entity(mu)->name : "Guest");
-		replace(buf, sizeof buf, "&entityname&", u != NULL ? entity(u)->name : "???");
+		replace(buf, sizeof buf, "&accountname&", entity(mu)->name);
+		replace(buf, sizeof buf, "&entityname&", u->myuser ? entity(u->myuser)->name : u->nick);
 		replace(buf, sizeof buf, "&netname&", me.netname);
 		replace(buf, sizeof buf, "&param&", param);
 		replace(buf, sizeof buf, "&sourceinfo&", sourceinfo);
@@ -769,7 +772,8 @@ int sendemail(user_t *u, myuser_t *mu, const char *type, const char *email, cons
 /* various access level checkers */
 bool is_founder(mychan_t *mychan, myentity_t *mt)
 {
-	return_val_if_fail(mt != NULL, false);
+	if (mt == NULL)
+		return false;
 
 	if (chanacs_entity_has_flag(mychan, mt, CA_FOUNDER))
 		return true;
@@ -804,6 +808,14 @@ bool is_autokline_exempt(user_t *user)
 		if (0 == match(n->data, buf))
 			return true;
 	}
+	return false;
+}
+
+bool is_service(user_t *user)
+{
+	if (UF_SERVICE & user->flags)
+		return true;
+
 	return false;
 }
 

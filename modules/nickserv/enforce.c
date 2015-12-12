@@ -96,7 +96,7 @@ static void guest_nickname(user_t *u)
 
 	/* Generate a new guest nickname and check if it already exists
 	 * This will try to generate a new nickname 30 different times
-	 * if nicks are in use. If it runs into 30 nicks in use, maybe 
+	 * if nicks are in use. If it runs into 30 nicks in use, maybe
 	 * you shouldn't use this module. */
 	for (tries = 0; tries < 30; tries++)
 	{
@@ -196,17 +196,29 @@ static void ns_cmd_release(sourceinfo_t *si, int parc, char *parv[])
 
 	u = user_find_named(target);
 	mn = mynick_find(target);
-	
+
 	if (!mn)
 	{
 		command_fail(si, fault_nosuch_target, _("\2%s\2 is not a registered nickname."), target);
 		return;
 	}
-	
+
 	/* The != NULL check is required to make releasing an enforcer via xmlrpc work */
 	if (u != NULL && u == si->su)
 	{
 		command_fail(si, fault_noprivs, _("You cannot RELEASE yourself."));
+		return;
+	}
+	if (password && metadata_find(mn->owner, "private:freeze:freezer"))
+	{
+		command_fail(si, fault_authfail, "You cannot release \2%s\2 because the account has been frozen.", target);
+		logcommand(si, CMDLOG_DO, "failed RELEASE \2%s\2 (frozen)", target);
+		return;
+	}
+	if (password && (mn->owner->flags & MU_NOPASSWORD))
+	{
+		command_fail(si, fault_authfail, _("Password authentication is disabled for this account."));
+		logcommand(si, CMDLOG_DO, "failed RELEASE \2%s\2 (password authentication disabled)", target);
 		return;
 	}
 	if ((si->smu == mn->owner) || verify_password(mn->owner, password))
@@ -246,7 +258,7 @@ static void ns_cmd_release(sourceinfo_t *si, int parc, char *parv[])
 					holdnick_sts(nicksvs.me->me, 60 + arc4random() % 60, u->nick, mn->owner);
 				else
 					u->flags |= UF_DOENFORCE;
-				command_success_nodata(si, _("%s has been released."), target);
+				command_success_nodata(si, _("\2%s\2 has been released."), target);
 				logcommand(si, CMDLOG_DO, "RELEASE: \2%s!%s@%s\2", u->nick, u->user, u->vhost);
 			}
 		}
@@ -274,6 +286,7 @@ static void ns_cmd_regain(sourceinfo_t *si, int parc, char *parv[])
 	user_t *u;
 	mowgli_node_t *n, *tn;
 	enforce_timeout_t *timeout;
+	char lau[BUFSIZE];
 
 	/* Absolutely do not do anything like this if nicks
 	 * are not considered owned */
@@ -294,20 +307,44 @@ static void ns_cmd_regain(sourceinfo_t *si, int parc, char *parv[])
 
 	u = user_find_named(target);
 	mn = mynick_find(target);
-	
+
 	if (!mn)
 	{
 		command_fail(si, fault_nosuch_target, _("\2%s\2 is not a registered nickname."), target);
 		return;
 	}
-	
+
 	if (u == si->su)
 	{
 		command_fail(si, fault_noprivs, _("You cannot REGAIN yourself."));
 		return;
 	}
+	if (password && metadata_find(mn->owner, "private:freeze:freezer"))
+	{
+		command_fail(si, fault_authfail, "You cannot regain \2%s\2 because the account has been frozen.", target);
+		logcommand(si, CMDLOG_DO, "failed REGAIN \2%s\2 (frozen)", target);
+		return;
+	}
+	if (password && (mn->owner->flags & MU_NOPASSWORD))
+	{
+		command_fail(si, fault_authfail, _("Password authentication is disabled for this account."));
+		logcommand(si, CMDLOG_DO, "failed REGAIN \2%s\2 (password authentication disabled)", target);
+		return;
+	}
+	if (!is_valid_nick(target))
+	{
+		command_fail(si, fault_badparams, "\2%s\2 is not a valid nick.", target);
+		logcommand(si, CMDLOG_DO, "failed REGAIN \2%s\2 (not a valid nickname)", target);
+		return;
+	}
 	if ((si->smu == mn->owner) || verify_password(mn->owner, password))
 	{
+		if (si->su != NULL && (user_is_channel_banned(si->su, 'b') || user_is_channel_banned(si->su, 'q')))
+		{
+			command_fail(si, fault_noprivs, _("You can not regain your nickname while banned or quieted on a channel."));
+			return;
+		}
+
 		/* if this (nick, host) is waiting to be enforced, remove it */
 		if (si->su != NULL)
 		{
@@ -348,6 +385,51 @@ static void ns_cmd_regain(sourceinfo_t *si, int parc, char *parv[])
 			}
 			fnc_sts(nicksvs.me->me, si->su, target, FNC_FORCE);
 		}
+
+		if (MOWGLI_LIST_LENGTH(&mn->owner->logins) >= me.maxlogins)
+		{
+			command_fail(si, fault_toomany, _("You were not logged in."));
+			command_fail(si, fault_toomany, _("There are already \2%zu\2 sessions logged in to \2%s\2 (maximum allowed: %u)."), MOWGLI_LIST_LENGTH(&mn->owner->logins), entity(mn->owner)->name, me.maxlogins);
+
+			lau[0] = '\0';
+			MOWGLI_ITER_FOREACH(n, mn->owner->logins.head)
+			{
+				if (lau[0] != '\0')
+					mowgli_strlcat(lau, ", ", sizeof lau);
+				mowgli_strlcat(lau, ((user_t *)n->data)->nick, sizeof lau);
+			}
+			command_fail(si, fault_toomany, _("Logged in nicks are: %s"), lau);
+
+			return;
+		}
+
+		/* identify them to the target nick's account if they aren't yet */
+		if (si->smu != mn->owner)
+		{
+			/* if they are identified to another account, nuke their session first */
+			if (si->smu != NULL)
+			{
+				command_success_nodata(si, _("You have been logged out of \2%s\2."), entity(si->smu)->name);
+
+				if (ircd_on_logout(si->su, entity(si->smu)->name))
+					/* logout killed the user... */
+					return;
+				si->smu->lastlogin = CURRTIME;
+				MOWGLI_ITER_FOREACH_SAFE(n, tn, si->smu->logins.head)
+				{
+					if (n->data == si->su)
+					{
+						mowgli_node_delete(n, &si->smu->logins);
+						mowgli_node_free(n);
+						break;
+					}
+				}
+				si->su->myuser = NULL;
+			}
+
+			myuser_login(si->service, si->su, mn->owner, true);
+		}
+
 		return;
 	}
 	if (!password)
@@ -440,8 +522,8 @@ static void check_registration(hook_user_register_check_t *hdata)
 
 	if (hdata->approved)
 		return;
-	
-	if (!strncasecmp(hdata->account, nicksvs.enforce_prefix, prefixlen) && isdigit(hdata->account[prefixlen]))
+
+	if (!strncasecmp(hdata->account, nicksvs.enforce_prefix, prefixlen) && isdigit((unsigned char)hdata->account[prefixlen]))
 	{
 		command_fail(hdata->si, fault_badparams, "The nick \2%s\2 is reserved and cannot be registered.", hdata->account);
 		hdata->approved = 1;

@@ -31,7 +31,7 @@ static void grant_channel_access_hook(user_t *u)
 
 	return_if_fail(u->myuser != NULL);
 
-	l = myuser_get_membership_list(u->myuser);
+	l = myentity_get_membership_list(entity(u->myuser));
 
 	MOWGLI_ITER_FOREACH_SAFE(n, tn, l->head)
 	{
@@ -56,10 +56,10 @@ static void grant_channel_access_hook(user_t *u)
 				if (ca->level & CA_AKICK && !(ca->level & CA_EXEMPT))
 				{
 					/* Stay on channel if this would empty it -- jilles */
-					if (ca->mychan->chan->nummembers <= (ca->mychan->flags & MC_GUARD ? 2 : 1))
+					if (ca->mychan->chan->nummembers - ca->mychan->chan->numsvcmembers == 1)
 					{
 						ca->mychan->flags |= MC_INHABIT;
-						if (!(ca->mychan->flags & MC_GUARD))
+						if (ca->mychan->chan->numsvcmembers == 0)
 							join(cu->chan->name, chansvs.nick);
 					}
 					ban(chansvs.me->me, ca->mychan->chan, u);
@@ -116,13 +116,13 @@ static void user_info_hook(hook_user_req_t *req)
 
 	*buf = 0;
 
-	l = myuser_get_membership_list(req->mu);
+	l = myentity_get_membership_list(entity(req->mu));
 
 	MOWGLI_ITER_FOREACH(n, l->head)
 	{
 		groupacs_t *ga = n->data;
 
-		if (groupacs_find(ga->mg, req->mu, GA_BAN) != NULL)
+		if (ga->flags & GA_BAN)
 			continue;
 
 		if ((ga->mg->flags & MG_PUBLIC) || (req->si->smu == req->mu || has_priv(req->si, PRIV_GROUP_AUSPEX)))
@@ -148,7 +148,7 @@ static void sasl_may_impersonate_hook(hook_sasl_may_impersonate_t *req)
 	if (req->allowed)
 		return;
 
-	l = myuser_get_membership_list(req->target_mu);
+	l = myentity_get_membership_list(entity(req->target_mu));
 
 	MOWGLI_ITER_FOREACH(n, l->head)
 	{
@@ -169,13 +169,13 @@ static void myuser_delete_hook(myuser_t *mu)
 	mowgli_node_t *n, *tn;
 	mowgli_list_t *l;
 
-	l = myuser_get_membership_list(mu);
+	l = myentity_get_membership_list(entity(mu));
 
 	MOWGLI_ITER_FOREACH_SAFE(n, tn, l->head)
 	{
 		groupacs_t *ga = n->data;
 
-		groupacs_delete(ga->mg, ga->mu);
+		groupacs_delete(ga->mg, ga->mt);
 	}
 
 	mowgli_list_free(l);

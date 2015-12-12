@@ -20,13 +20,12 @@
 
 DECLARE_MODULE_V1
 (
-	"saslserv/ecdsa-nist256p-challenge", MODULE_UNLOAD_CAPABILITY_NEVER, _modinit, _moddeinit,
+	"saslserv/ecdsa-nist256p-challenge", false, _modinit, _moddeinit,
 	PACKAGE_STRING,
 	"Atheme Development Group <http://www.atheme.org>"
 );
 
-mowgli_list_t *mechanisms;
-mowgli_node_t *mnode;
+sasl_mech_register_func_t *regfuncs;
 static int mech_start(sasl_session_t *p, char **out, size_t *out_len);
 static int mech_step(sasl_session_t *p, char *message, size_t len, char **out, size_t *out_len);
 static void mech_finish(sasl_session_t *p);
@@ -47,14 +46,14 @@ typedef struct {
 
 void _modinit(module_t *m)
 {
-	MODULE_TRY_REQUEST_SYMBOL(m, mechanisms, "saslserv/main", "sasl_mechanisms");
-	mnode = mowgli_node_create();
-	mowgli_node_add(&mech, mnode, mechanisms);
+	MODULE_TRY_REQUEST_DEPENDENCY(m, "nickserv/set_pubkey");
+	MODULE_TRY_REQUEST_SYMBOL(m, regfuncs, "saslserv/main", "sasl_mech_register_funcs");
+	regfuncs->mech_register(&mech);
 }
 
 void _moddeinit(module_unload_intent_t intent)
 {
-	mowgli_node_delete(mnode, mechanisms);
+	regfuncs->mech_unregister(&mech);
 }
 
 static int mech_start(sasl_session_t *p, char **out, size_t *out_len)
@@ -95,9 +94,13 @@ static int mech_step_accname(sasl_session_t *p, char *message, size_t len, char 
 	if (mu == NULL)
 		return ASASL_FAIL;
 
-	md = metadata_find(mu, "pubkey");
+	md = metadata_find(mu, "private:pubkey");
 	if (md == NULL)
-		return ASASL_FAIL;
+	{
+		md = metadata_find(mu, "pubkey");
+		if (md == NULL)
+			return ASASL_FAIL;
+	}
 
 	ret = base64_decode(md->value, (char *)pubkey_raw, BUFSIZE);
 	if (ret == -1)
@@ -124,7 +127,7 @@ static int mech_step_response(sasl_session_t *p, char *message, size_t len, char
 {
 	ecdsa_session_t *s = p->mechdata;
 
-	if (!ECDSA_verify(0, s->challenge, CHALLENGE_LENGTH, (const unsigned char *)message, len, s->pubkey))
+	if (ECDSA_verify(0, s->challenge, CHALLENGE_LENGTH, (const unsigned char *)message, len, s->pubkey) != 1)
 		return ASASL_FAIL;
 
 	return ASASL_DONE;

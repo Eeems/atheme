@@ -154,7 +154,7 @@ bs_topic_sts(channel_t *c, user_t *source, const char *setter, time_t ts, time_t
 	return_if_fail(setter != NULL);
 	return_if_fail(topic != NULL);
 
-	if (source == chansvs.me->me && (mc = MYCHAN_FROM(c)) != NULL)
+	if (source == chansvs.me->me && (mc = mychan_from(c)) != NULL)
 		bot = bs_mychan_find_bot(mc);
 
 	topic_sts_real(c, bot ? bot->me->me : source, setter, ts, prevts, topic);
@@ -172,7 +172,7 @@ bs_modestack_mode_simple(const char *source, channel_t *channel, int dir, int fl
 
 	if (source != NULL && chansvs.nick != NULL &&
 			!strcmp(source, chansvs.nick) &&
-			(mc = MYCHAN_FROM(channel)) != NULL &&
+			(mc = mychan_from(channel)) != NULL &&
 			(bs = metadata_find(mc, "private:botserv:bot-assigned")) != NULL)
 		bot = user_find_named(bs->value);
 
@@ -191,7 +191,7 @@ bs_modestack_mode_limit(const char *source, channel_t *channel, int dir, unsigne
 
 	if (source != NULL && chansvs.nick != NULL &&
 			!strcmp(source, chansvs.nick) &&
-			(mc = MYCHAN_FROM(channel)) != NULL &&
+			(mc = mychan_from(channel)) != NULL &&
 			(bs = metadata_find(mc, "private:botserv:bot-assigned")) != NULL)
 		bot = user_find_named(bs->value);
 
@@ -210,7 +210,7 @@ bs_modestack_mode_ext(const char *source, channel_t *channel, int dir, unsigned 
 
 	if (source != NULL && chansvs.nick != NULL &&
 			!strcmp(source, chansvs.nick) &&
-			(mc = MYCHAN_FROM(channel)) != NULL &&
+			(mc = mychan_from(channel)) != NULL &&
 			(bs = metadata_find(mc, "private:botserv:bot-assigned")) != NULL)
 		bot = user_find_named(bs->value);
 
@@ -229,7 +229,7 @@ bs_modestack_mode_param(const char *source, channel_t *channel, int dir, char ty
 
 	if (source != NULL && chansvs.nick != NULL &&
 			!strcmp(source, chansvs.nick) &&
-			(mc = MYCHAN_FROM(channel)) != NULL &&
+			(mc = mychan_from(channel)) != NULL &&
 			(bs = metadata_find(mc, "private:botserv:bot-assigned")) != NULL)
 		bot = user_find_named(bs->value);
 
@@ -249,7 +249,7 @@ bs_try_kick(user_t *source, channel_t *chan, user_t *target, const char *reason)
 	if (source != chansvs.me->me)
 		return try_kick_real(source, chan, target, reason);
 
-	if ((mc = MYCHAN_FROM(chan)) != NULL && (bs = metadata_find(mc, "private:botserv:bot-assigned")) != NULL)
+	if ((mc = mychan_from(chan)) != NULL && (bs = metadata_find(mc, "private:botserv:bot-assigned")) != NULL)
 		bot = user_find_named(bs->value);
 
 	try_kick_real(bot ? bot : source, chan, target, reason);
@@ -297,7 +297,7 @@ static void bs_channel_drop(mychan_t *mc)
 	botserv_bot_t *bot;
 
 	if ((bot = bs_mychan_find_bot(mc)) == NULL)
-		return;	
+		return;
 
 	metadata_delete(mc, "private:botserv:bot-assigned");
 	metadata_delete(mc, "private:botserv:bot-handle-fantasy");
@@ -367,7 +367,7 @@ botserv_channel_handler(sourceinfo_t *si, int parc, char *parv[])
 
 	if (!cmd)
 		return;
-	if (*cmd == '\001')
+	if (*orig == '\001')
 	{
 		handle_ctcp_common(si, cmd, strtok(NULL, ""));
 		return;
@@ -380,7 +380,7 @@ botserv_channel_handler(sourceinfo_t *si, int parc, char *parv[])
 	if ((sptr = service_find("chanserv")) == NULL)
 		return;
 
-	if (strlen(cmd) >= 2 && strchr(prefix, cmd[0]) && isalpha(*++cmd))
+	if (strlen(cmd) >= 2 && strchr(prefix, cmd[0]) && isalpha((unsigned char)*++cmd))
 	{
 		const char *realcmd = service_resolve_alias(chansvs.me, NULL, cmd);
 
@@ -487,12 +487,16 @@ static void db_h_bot(database_handle_t *db, const char *type)
 
 	bot = scalloc(sizeof(botserv_bot_t), 1);
 	bot->nick = sstrdup(nick);
-	bot->user = sstrdup(user);
+
+	if (!is_valid_username(user))
+		user = "botserv";
+
+	bot->user = sstrndup(user, USERLEN - 1);
 	bot->host = sstrdup(host);
 	bot->real = sstrdup(real);
 	bot->private = private;
 	bot->registered = registered;
-	bot->me = service_add_static(bot->nick, bot->user, bot->host, bot->real, botserv_channel_handler);
+	bot->me = service_add_static(bot->nick, bot->user, bot->host, bot->real, botserv_channel_handler, chansvs.me);
 	service_set_chanmsg(bot->me, true);
 	mowgli_node_add(bot, &bot->bnode, &bs_bots);
 }
@@ -643,9 +647,9 @@ static void bs_cmd_change(sourceinfo_t *si, int parc, char *parv[])
 			bot->host = sstrdup(parv[3]);
 		case 3:
 			/* XXX: we really need an is_valid_user(), but this is close enough. --nenolod */
-			if (valid_misc_field(parv[2], USERLEN - 1)) {
+			if (is_valid_username(parv[2])) {
 				free(bot->user);
-				bot->user = sstrdup(parv[2]);
+				bot->user = sstrndup(parv[2], USERLEN - 1);
 			} else
 				command_fail(si, fault_badparams, _("\2%s\2 is an invalid username, not changing it."), parv[2]);
 		case 2:
@@ -658,7 +662,7 @@ static void bs_cmd_change(sourceinfo_t *si, int parc, char *parv[])
 			return;
 	}
 	bot->registered = CURRTIME;
-	bot->me = service_add_static(bot->nick, bot->user, bot->host, bot->real, botserv_channel_handler);
+	bot->me = service_add_static(bot->nick, bot->user, bot->host, bot->real, botserv_channel_handler, chansvs.me);
 	service_set_chanmsg(bot->me, true);
 
 	/* join it back and also update the metadata */
@@ -720,7 +724,7 @@ static void bs_cmd_add(sourceinfo_t *si, int parc, char *parv[])
 		return;
 	}
 
-	if (!valid_misc_field(parv[1], USERLEN - 1))
+	if (!is_valid_username(parv[1]))
 	{
 		command_fail(si, fault_badparams, _("\2%s\2 is an invalid username."), parv[1]);
 		return;
@@ -737,12 +741,12 @@ static void bs_cmd_add(sourceinfo_t *si, int parc, char *parv[])
 
 	bot = scalloc(sizeof(botserv_bot_t), 1);
 	bot->nick = sstrdup(parv[0]);
-	bot->user = sstrdup(parv[1]);
+	bot->user = sstrndup(parv[1], USERLEN - 1);
 	bot->host = sstrdup(parv[2]);
 	bot->real = sstrdup(buf);
 	bot->private = false;
 	bot->registered = CURRTIME;
-	bot->me = service_add_static(bot->nick, bot->user, bot->host, bot->real, botserv_channel_handler);
+	bot->me = service_add_static(bot->nick, bot->user, bot->host, bot->real, botserv_channel_handler, chansvs.me);
 	service_set_chanmsg(bot->me, true);
 	mowgli_node_add(bot, &bot->bnode, &bs_bots);
 
@@ -845,7 +849,7 @@ static void bs_cmd_assign(sourceinfo_t *si, int parc, char *parv[])
 {
 	char *channel = parv[0];
 	channel_t *c = channel_find(channel);
-	mychan_t *mc = MYCHAN_FROM(c);
+	mychan_t *mc = mychan_from(c);
 	metadata_t *md;
 	botserv_bot_t *bot;
 
@@ -1094,7 +1098,7 @@ static void bs_join(hook_channel_joinpart_t *hdata)
 	chan = cu->chan;
 
 	/* first check if this is a registered channel at all */
-	mc = MYCHAN_FROM(chan);
+	mc = mychan_from(chan);
 	if (mc == NULL)
 		return;
 
@@ -1135,7 +1139,7 @@ bs_part(hook_channel_joinpart_t *hdata)
 	if (cu == NULL)
 		return;
 
-	mc = MYCHAN_FROM(cu->chan);
+	mc = mychan_from(cu->chan);
 	if (mc == NULL)
 		return;
 
@@ -1158,7 +1162,7 @@ bs_part(hook_channel_joinpart_t *hdata)
 	*/
 	if (config_options.leave_chans
 			&& !(mc->flags & MC_INHABIT)
-			&& (cu->chan->nummembers <= 2)
+			&& (cu->chan->nummembers - cu->chan->numsvcmembers == 1)
 			&& !is_internal_client(cu->user))
 	{
 		if (bot)

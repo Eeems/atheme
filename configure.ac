@@ -7,7 +7,7 @@ dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
 
-AC_INIT(atheme, 7.2.0-dev, bugs@atheme.org)
+AC_INIT(atheme, 7.2.6, bugs@atheme.org)
 
 AC_CONFIG_AUX_DIR(autoconf)
 
@@ -70,7 +70,7 @@ dnl Checks for header files.
 AC_CHECK_HEADERS(link.h,,,[-])
 
 dnl Checks for library functions.
-AC_CHECK_FUNCS([inet_pton inet_ntop gettimeofday umask arc4random getrlimit fork getpid execve strtok_r inet_ntop strcasestr])
+AC_CHECK_FUNCS([inet_pton inet_ntop gettimeofday umask arc4random arc4random_buf arc4random_uniform explicit_bzero memset_s getrlimit fork getpid execve strtok_r inet_ntop strcasestr])
 AC_CHECK_FUNC(socket,, AC_CHECK_LIB(socket, socket))
 AC_CHECK_FUNC(gethostbyname,, AC_CHECK_LIB(nsl, gethostbyname))
 AC_SEARCH_LIBS(crypt, crypt, [AC_DEFINE([HAVE_CRYPT], [], [Define if crypt() is available])])
@@ -359,13 +359,6 @@ if test "x$enablerpath" != "xyes"; then
 	LDFLAGS_RPATH=""
 fi
 
-PKG_CHECK_MODULES(JANSSON, [jansson >= 2.4],
-	[JSON="yes"], [JSON="no"])
-
-if test "$JSON" = "yes"; then
-	AC_DEFINE(HAVE_JSON,, Define to 1 if JSON is available)
-fi
-
 PKG_CHECK_MODULES(LIBQRENCODE, [libqrencode], [LIBQRENCODE="yes"], [LIBQRENCODE="no"])
 
 if test "$LIBQRENCODE" = "yes"; then
@@ -450,7 +443,6 @@ Configuration:
 	Mowgli installation  : ${MOWGLI_SOURCE}
 	PCRE support         : ${with_pcre}
 	Perl support         : ${with_perl}
-	JSON support         : ${JSON}
 	QR Code support      : ${LIBQRENCODE}
 	CFLAGS               : ${CFLAGS}
 	Internationalization : ${USE_NLS}

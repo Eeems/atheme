@@ -224,7 +224,7 @@ static void p10_unxline_sts(const char *server, const char *realname)
 
 static void p10_qline_sts(const char *server, const char *name, long duration, const char *reason)
 {
-	if (*name != '#' && *name != '&')
+	if (!VALID_CHANNEL_PFX(name))
 	{
 		slog(LG_INFO, "SQLINE: Could not set SQLINE on \2%s\2, not supported by ircu.", name);
 		return;
@@ -236,7 +236,7 @@ static void p10_qline_sts(const char *server, const char *name, long duration, c
 
 static void p10_unqline_sts(const char *server, const char *name)
 {
-	if (*name != '#' && *name != '&')
+	if (!VALID_CHANNEL_PFX(name))
 	{
 		slog(LG_INFO, "SQLINE: Could not remove SQLINE on \2%s\2, not supported by ircu.", name);
 		return;
@@ -653,12 +653,12 @@ static void m_nick(sourceinfo_t *si, int parc, char *parv[])
 	/* if it's only 2 then it's a nickname change */
 	else if (parc == 2)
 	{
-                if (!si->su)
-                {       
-                        slog(LG_DEBUG, "m_nick(): server trying to change nick: %s", si->s != NULL ? si->s->name : "<none>");
-                        return;
-                }
-                
+		if (!si->su)
+		{
+			slog(LG_DEBUG, "m_nick(): server trying to change nick: %s", si->s != NULL ? si->s->name : "<none>");
+			return;
+		}
+
 		slog(LG_DEBUG, "m_nick(): nickname change from `%s': %s", si->su->nick, parv[0]);
 
 		if (user_changenick(si->su, parv[0], atoi(parv[1])))

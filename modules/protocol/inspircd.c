@@ -2,7 +2,7 @@
  * Copyright (c) 2005-2006 Atheme Development Group
  * Rights to this code are documented in doc/LICENSE.
  *
- * InspIRCd 1.2 - 2.1 link support
+ * InspIRCd link support
  */
 
 #include "atheme.h"
@@ -15,55 +15,54 @@ DECLARE_MODULE_V1("protocol/inspircd", true, _modinit, NULL, PACKAGE_STRING, "At
 /* *INDENT-OFF* */
 
 ircd_t InspIRCd = {
-        "InspIRCd", /* IRCd name */
-        "$",                            /* TLD Prefix, used by Global. */
-        true,                           /* Whether or not we use IRCNet/TS6 UID */
-        false,                          /* Whether or not we use RCOMMAND */
-        true,                          /* Whether or not we support channel owners. */
-        true,                          /* Whether or not we support channel protection. */
-        true,                           /* Whether or not we support halfops. */
-	false,				/* Whether or not we use P10 */
-	true,				/* Whether or not we use vHosts. */
-	CMODE_OPERONLY | CMODE_PERM | CMODE_IMMUNE,	    /* Oper-only cmodes */
-        CSTATUS_OWNER,                    /* Integer flag for owner channel flag. */
-        CSTATUS_PROTECT,                  /* Integer flag for protect channel flag. */
-        CSTATUS_HALFOP,                   /* Integer flag for halfops. */
-        "+q",                           /* Mode we set for owner. */
-        "+a",                           /* Mode we set for protect. */
-        "+h",                           /* Mode we set for halfops. */
-	PROTOCOL_INSPIRCD,		/* Protocol type */
-	CMODE_PERM,                              /* Permanent cmodes */
-	CMODE_IMMUNE,                              /* Oper-immune cmode */
-	"beIgXw",                         /* Ban-like cmodes */
-	'e',                            /* Except mchar */
-	'I',                            /* Invex mchar */
-	IRCD_CIDR_BANS | IRCD_HOLDNICK  /* Flags */
+	.ircdname = "InspIRCd",
+	.tldprefix = "$",
+	.uses_uid = true,
+	.uses_rcommand = false,
+	.uses_owner = true,
+	.uses_protect = true,
+	.uses_halfops = true,
+	.uses_p10 = false,
+	.uses_vhost = true,
+	.oper_only_modes = CMODE_OPERONLY | CMODE_PERM,
+	.owner_mode = CSTATUS_OWNER,
+	.protect_mode = CSTATUS_PROTECT,
+	.halfops_mode = CSTATUS_HALFOP,
+	.owner_mchar = "+q",
+	.protect_mchar = "+a",
+	.halfops_mchar = "+h",
+	.type = PROTOCOL_INSPIRCD,
+	.perm_mode = CMODE_PERM,
+	.oimmune_mode = 0,
+	.ban_like_modes = "beIgXw",
+	.except_mchar = 'e',
+	.invex_mchar = 'I',
+	.flags = IRCD_CIDR_BANS | IRCD_HOLDNICK,
 };
 
 struct cmode_ inspircd_mode_list[] = {
-  { 'i', CMODE_INVITE   },
-  { 'm', CMODE_MOD      },
-  { 'n', CMODE_NOEXT    },
-  { 'p', CMODE_PRIV     },
-  { 's', CMODE_SEC      },
-  { 't', CMODE_TOPIC    },
-  { 'c', CMODE_NOCOLOR  },
-  { 'M', CMODE_MODREG   },
-  { 'R', CMODE_REGONLY  },
+  { 'i', CMODE_INVITE	},
+  { 'm', CMODE_MOD	},
+  { 'n', CMODE_NOEXT	},
+  { 'p', CMODE_PRIV	},
+  { 's', CMODE_SEC	},
+  { 't', CMODE_TOPIC	},
+  { 'c', CMODE_NOCOLOR	},
+  { 'M', CMODE_MODREG	},
+  { 'R', CMODE_REGONLY	},
   { 'O', CMODE_OPERONLY },
-  { 'S', CMODE_STRIP    },
-  { 'K', CMODE_NOKNOCK  },
+  { 'S', CMODE_STRIP	},
+  { 'K', CMODE_NOKNOCK	},
   { 'A', CMODE_NOINVITE },
-  { 'C', CMODE_NOCTCP   },
-  { 'N', CMODE_STICKY   },
-  { 'G', CMODE_CENSOR   },
-  { 'P', CMODE_PERM     },
+  { 'C', CMODE_NOCTCP	},
+  { 'N', CMODE_STICKY	},
+  { 'G', CMODE_CENSOR	},
+  { 'P', CMODE_PERM	},
   { 'B', CMODE_NOCAPS	},
   { 'z', CMODE_SSLONLY	},
   { 'T', CMODE_NONOTICE },
-  { 'u', CMODE_HIDING   },
-  { 'Q', CMODE_PEACE    },
-  { 'Y', CMODE_IMMUNE	},
+  { 'u', CMODE_HIDING	},
+  { 'Q', CMODE_PEACE	},
   { 'D', CMODE_DELAYJOIN },
   { '\0', 0 }
 };
@@ -75,6 +74,8 @@ static bool check_forward(const char *, channel_t *, mychan_t *, user_t *, myuse
 static bool check_rejoindelay(const char *, channel_t *, mychan_t *, user_t *, myuser_t *);
 static bool check_delaymsg(const char *, channel_t *, mychan_t *, user_t *, myuser_t *);
 static bool check_history(const char *, channel_t *, mychan_t *, user_t *, myuser_t *);
+
+static unsigned int max_rejoindelay = 5;
 
 struct extmode inspircd_ignore_mode_list[] = {
   { 'f', check_flood },
@@ -88,20 +89,22 @@ struct extmode inspircd_ignore_mode_list[] = {
 };
 
 struct cmode_ inspircd_status_mode_list[] = {
-  { 'q', CSTATUS_OWNER   },
+  { 'Y', CSTATUS_IMMUNE	 },
+  { 'q', CSTATUS_OWNER	 },
   { 'a', CSTATUS_PROTECT },
-  { 'o', CSTATUS_OP      },
+  { 'o', CSTATUS_OP	 },
   { 'h', CSTATUS_HALFOP  },
-  { 'v', CSTATUS_VOICE   },
+  { 'v', CSTATUS_VOICE	 },
   { '\0', 0 }
 };
 
 struct cmode_ inspircd_prefix_mode_list[] = {
-  { '~', CSTATUS_OWNER   },
+  { '!', CSTATUS_IMMUNE	 },
+  { '~', CSTATUS_OWNER	 },
   { '&', CSTATUS_PROTECT },
-  { '@', CSTATUS_OP      },
+  { '@', CSTATUS_OP	 },
   { '%', CSTATUS_HALFOP  },
-  { '+', CSTATUS_VOICE   },
+  { '+', CSTATUS_VOICE	 },
   { '\0', 0 }
 };
 
@@ -109,6 +112,7 @@ struct cmode_ inspircd_user_mode_list[] = {
   { 'i', UF_INVIS    },
   { 'o', UF_IRCOP    },
   { 'd', UF_DEAF     },
+  { 'k', UF_IMMUNE   },
   { '\0', 0 }
 };
 
@@ -183,6 +187,16 @@ static mowgli_node_t *inspircd_next_matching_ban(channel_t *c, user_t *u, int ty
 	return NULL;
 }
 
+static bool inspircd_is_extban(const char *mask)
+{
+	const size_t mask_len = strlen(mask);
+	/* e.g R:Test */
+	if (mask_len < 2 || mask[1] != ':' || strchr(mask, ' '))
+		return false;
+
+	return true;
+}
+
 /* CAPABilities */
 static bool has_hideopermod = false;
 static bool has_servicesmod = false;
@@ -197,7 +211,8 @@ static bool has_shun = false;
 static bool has_svstopic_topiclock = false;
 static int has_protocol = 0;
 
-#define PROTOCOL_12BETA 1201 /* we do not support anything older than this */
+#define PROTOCOL_MINIMUM 1202 /* we do not support anything older than this */
+#define PROTOCOL_PREFERRED_STR "1202"
 
 /* find a user's server by extracting the SID and looking that up. --nenolod */
 static server_t *sid_find(char *name)
@@ -238,7 +253,7 @@ static bool check_jointhrottle(const char *value, channel_t *c, mychan_t *mc, us
 				return false;
 			arg2 = p + 1;
 		}
-		else if (!isdigit(*p))
+		else if (!isdigit((unsigned char)*p))
 			return false;
 		p++;
 	}
@@ -251,7 +266,7 @@ static bool check_jointhrottle(const char *value, channel_t *c, mychan_t *mc, us
 
 static bool check_history(const char *value, channel_t *c, mychan_t *mc, user_t *u, myuser_t *mu)
 {
-        return check_jointhrottle(value, c, mc, u, mu);
+	return check_jointhrottle(value, c, mc, u, mu);
 }
 
 static bool check_forward(const char *value, channel_t *c, mychan_t *mc, user_t *u, myuser_t *mu)
@@ -259,12 +274,12 @@ static bool check_forward(const char *value, channel_t *c, mychan_t *mc, user_t 
 	channel_t *target_c;
 	mychan_t *target_mc;
 
-	if (*value != '#' || strlen(value) > 50)
+	if (!VALID_GLOBAL_CHANNEL_PFX(value) || strlen(value) > 50)
 		return false;
 	if (u == NULL && mu == NULL)
 		return true;
 	target_c = channel_find(value);
-	target_mc = MYCHAN_FROM(target_c);
+	target_mc = mychan_from(target_c);
 	if (target_c == NULL && target_mc == NULL)
 		return false;
 	return true;
@@ -276,14 +291,12 @@ static bool check_rejoindelay(const char *value, channel_t *c, mychan_t *mc, use
 
 	while (*ch)
 	{
-		if (!isdigit(*ch))
+		if (!isdigit((unsigned char)*ch))
 			return false;
 		ch++;
 	}
 
-	/* don't allow mlocking a rejoin delay mode greater than 5 seconds.
-	   it's extremely rude. --nenolod */
-	if (atoi(value) <= 0 || atoi(value) >= 5)
+	if (atoi(value) <= 0 || atoi(value) >= max_rejoindelay)
 	{
 		return false;
 	}
@@ -299,7 +312,7 @@ static bool check_delaymsg(const char *value, channel_t *c, mychan_t *mc, user_t
 
 	while (*ch)
 	{
-		if (!isdigit(*ch))
+		if (!isdigit((unsigned char)*ch))
 			return false;
 		ch++;
 	}
@@ -314,17 +327,22 @@ static bool check_delaymsg(const char *value, channel_t *c, mychan_t *mc, user_t
 	}
 }
 
+static void inspircd_send_fjoin(channel_t *c, user_t *u, char *modes)
+{
+	sts(":%s FJOIN %s %lu %s :o,%s", me.numeric, c->name, (unsigned long)c->ts, modes, u->uid);
+}
+
 /* login to our uplink */
 static unsigned int inspircd_server_login(void)
 {
 	int ret;
 
-	/* Check if we have a numeric set. InspIRCd 1.2 protocol 
+	/* Check if we have a numeric set. InspIRCd 1.2 protocol
 	 * requires it. -nenolod
 	 */
 	if (me.numeric == NULL)
 	{
-		slog(LG_ERROR, "inspircd_server_login(): inspircd 1.2 requires a unique identifier. set serverinfo::numeric.");
+		slog(LG_ERROR, "inspircd_server_login(): inspircd requires a unique identifier. set serverinfo::numeric.");
 		exit(EXIT_FAILURE);
 	}
 
@@ -333,9 +351,12 @@ static unsigned int inspircd_server_login(void)
 	ircd->uses_protect = false;
 	ircd->uses_halfops = false;
 
-	ret = sts("SERVER %s %s 0 %s :%s", me.name, curr_uplink->send_pass, me.numeric, me.desc);
+	ret = sts("CAPAB START " PROTOCOL_PREFERRED_STR);
 	if (ret == 1)
 		return 1;
+	sts("CAPAB CAPABILITIES :PROTOCOL=" PROTOCOL_PREFERRED_STR);
+	sts("CAPAB END");
+	sts("SERVER %s %s 0 %s :%s", me.name, curr_uplink->send_pass, me.numeric, me.desc);
 
 	me.bursting = true;
 	return 0;
@@ -348,8 +369,8 @@ static void inspircd_introduce_nick(user_t *u)
 	const char *umode = user_get_umodestr(u);
 
 	sts(":%s UID %s %lu %s %s %s %s 0.0.0.0 %lu %s%s%s%s :%s", me.numeric, u->uid, (unsigned long)u->ts, u->nick, u->host, u->host, u->user, (unsigned long)u->ts, umode, has_hideopermod ? "H" : "", has_hidechansmod ? "I" : "", has_servprotectmod ? "k" : "", u->gecos);
-	if (is_ircop(u))
-		sts(":%s OPERTYPE Services", u->uid);
+	if (is_ircop(u) && !has_servprotectmod)
+		sts(":%s OPERTYPE Service", u->uid);
 }
 
 static void inspircd_quit_sts(user_t *u, const char *reason)
@@ -369,25 +390,18 @@ static void inspircd_wallops_sts(const char *text)
 /* join a channel */
 static void inspircd_join_sts(channel_t *c, user_t *u, bool isnew, char *modes)
 {
-	if (isnew)
-	{
-		sts(":%s FJOIN %s %lu + :o,%s", me.numeric, c->name, (unsigned long)c->ts, u->uid);
-		if (modes[0] && modes[1])
-			sts(":%s FMODE %s %lu %s", me.numeric, c->name, (unsigned long)c->ts, modes);
-	}
-	else
-	{
-		sts(":%s FJOIN %s %lu + :o,%s", me.numeric, c->name, (unsigned long)c->ts, u->uid);
-	}
+	if (!isnew || !modes[0])
+		modes = "+";
+
+	inspircd_send_fjoin(c, u, modes);
 }
 
 static void inspircd_chan_lowerts(channel_t *c, user_t *u)
 {
-	slog(LG_DEBUG, "inspircd_chan_lowerts(): lowering TS for %s to %lu", 
+	slog(LG_DEBUG, "inspircd_chan_lowerts(): lowering TS for %s to %lu",
 		c->name, (unsigned long)c->ts);
 
-	sts(":%s FJOIN %s %lu + :o,%s", me.numeric, c->name, (unsigned long)c->ts, u->uid);
-	sts(":%s FMODE %s %lu %s", me.numeric, c->name, (unsigned long)c->ts, channel_modes(c, true));
+	inspircd_send_fjoin(c, u, channel_modes(c, true));
 }
 
 /* kicks a user from a channel */
@@ -410,7 +424,7 @@ static void inspircd_msg(const char *from, const char *target, const char *fmt, 
 	vsnprintf(buf, BUFSIZE, fmt, ap);
 	va_end(ap);
 
-	sts(":%s PRIVMSG %s :%s", from_p->uid, *target != '#' ? user->uid : target, buf);
+	sts(":%s PRIVMSG %s :%s", from_p->uid, !VALID_GLOBAL_CHANNEL_PFX(target) ? user->uid : target, buf);
 }
 
 static void inspircd_msg_global_sts(user_t *from, const char *mask, const char *text)
@@ -476,9 +490,8 @@ static void inspircd_unkline_sts(const char *server, const char *user, const cha
 {
 	service_t *svs;
 
-	/* I know this looks wrong, but it's really not. Trust me. --w00t */
 	svs = service_find("operserv");
-	sts(":%s GLINE %s@%s", svs != NULL ? svs->me->uid : ME, user, host);
+	sts(":%s DELLINE G %s@%s", svs != NULL ? svs->me->uid : ME, user, host);
 }
 
 /* server-to-server QLINE wrapper */
@@ -488,7 +501,7 @@ static void inspircd_qline_sts(const char *server, const char *name, long durati
 
 	svs = service_find("operserv");
 
-	if (*name != '#')
+	if (!VALID_GLOBAL_CHANNEL_PFX(name))
 	{
 		sts(":%s ADDLINE Q %s %s %lu %ld :%s", me.numeric, name, svs != NULL ? svs->nick : me.name, (unsigned long)CURRTIME, duration, reason);
 		return;
@@ -503,9 +516,9 @@ static void inspircd_qline_sts(const char *server, const char *name, long durati
 /* server-to-server UNQLINE wrapper */
 static void inspircd_unqline_sts(const char *server, const char *name)
 {
-	if (*name != '#')
+	if (!VALID_GLOBAL_CHANNEL_PFX(name))
 	{
-		sts(":%s QLINE %s", ME, name);
+		sts(":%s DELLINE Q %s", ME, name);
 		return;
 	}
 
@@ -513,7 +526,25 @@ static void inspircd_unqline_sts(const char *server, const char *name)
 		sts(":%s CBAN %s", ME, name);
 	else
 		slog(LG_INFO, "SQLINE: Could not remove SQLINE on \2%s\2 due to m_cban not being loaded in inspircd.", name);
-}	
+}
+
+/* server-to-server ZLINE/DLINE wrapper */
+static void inspircd_dline_sts(const char *server, const char *host, long duration, const char *reason)
+{
+	service_t *svs;
+
+	svs = service_find("operserv");
+	sts(":%s ADDLINE Z %s %s %lu %ld :%s", me.numeric, host, svs != NULL ? svs->nick : me.name, (unsigned long)CURRTIME, duration, reason);
+}
+
+/* server-to-server UNZLINE/UNDLINE wrapper */
+static void inspircd_undline_sts(const char *server, const char *host)
+{
+	service_t *svs;
+
+	svs = service_find("operserv");
+	sts(":%s DELLINE Z %s", svs != NULL ? svs->me->uid : ME, host);
+}
 
 /* topic wrapper */
 static void inspircd_topic_sts(channel_t *c, user_t *source, const char *setter, time_t ts, time_t prevts, const char *topic)
@@ -644,7 +675,7 @@ static void inspircd_sethost_sts(user_t *source, user_t *target, const char *hos
 		sts(":%s CHGHOST %s %s", source->uid, target->uid, host);
 
 		if (has_cloakingmod && !irccasecmp(target->host, host))
-			sts(":%s SVSMODE %s +x", source->uid, target->uid);
+			sts(":%s MODE %s +x", source->uid, target->uid);
 	}
 	else
 		slog(LG_INFO, "VHOST: Could not set \2%s\2 due to m_chghost not being loaded in inspircd.", host);
@@ -688,14 +719,11 @@ static void inspircd_holdnick_sts(user_t *source, int duration, const char *nick
 
 static void inspircd_svslogin_sts(char *target, char *nick, char *user, char *host, myuser_t *account)
 {
-	user_t *tu = user_find(target);
-
-	if(!tu && !ircd->uses_uid)
-		return;
-
 	sts(":%s METADATA %s accountname :%s", me.numeric, target, entity(account)->name);
-	if (has_chghostmod)
-		sts(":%s CHGHOST %s %s", me.numeric, target, host);
+
+	// If host is a "*" that means no change requested
+	if ((has_chghostmod) && (strcmp(host, "*")))
+		sts(":%s ENCAP %c%c%c CHGHOST %s %s", me.numeric, target[0], target[1], target[2], target, host);
 }
 
 static void inspircd_sasl_sts(char *target, char mode, char *data)
@@ -712,6 +740,11 @@ static void inspircd_sasl_sts(char *target, char mode, char *data)
 	sts(":%s ENCAP %s SASL %s %s %c %s", ME, s->sid, svs->me->uid, target, mode, data);
 }
 
+static void inspircd_sasl_mechlist_sts(const char *mechlist)
+{
+	sts(":%s METADATA * saslmechlist :%s", ME, mechlist);
+}
+
 static void inspircd_quarantine_sts(user_t *source, user_t *victim, long duration, const char *reason)
 {
 	if (has_shun)
@@ -720,7 +753,7 @@ static void inspircd_quarantine_sts(user_t *source, user_t *victim, long duratio
 
 static void inspircd_mlock_sts(channel_t *c)
 {
-	mychan_t *mc = MYCHAN_FROM(c);
+	mychan_t *mc = mychan_from(c);
 
 	if (mc == NULL)
 		return;
@@ -730,7 +763,7 @@ static void inspircd_mlock_sts(channel_t *c)
 
 static void  inspircd_topiclock_sts(channel_t *c)
 {
-	mychan_t *mc = MYCHAN_FROM(c);
+	mychan_t *mc = mychan_from(c);
 	if (mc == NULL || !has_svstopic_topiclock)
 		return;
 
@@ -990,17 +1023,8 @@ static void m_fjoin(sourceinfo_t *si, int parc, char *parv[])
 
 static void m_part(sourceinfo_t *si, int parc, char *parv[])
 {
-	int chanc;
-	char *chanv[256];
-	int i;
-
-	chanc = sjtoken(parv[0], ',', chanv);
-	for (i = 0; i < chanc; i++)
-	{
-		slog(LG_DEBUG, "m_part(): user left channel: %s -> %s", si->su->nick, chanv[i]);
-
-		chanuser_delete(channel_find(chanv[i]), si->su);
-	}
+	slog(LG_DEBUG, "m_part(): user left channel: %s -> %s", si->su->nick, parv[0]);
+	chanuser_delete(channel_find(parv[0]), si->su);
 }
 
 static void m_uid(sourceinfo_t *si, int parc, char *parv[])
@@ -1014,61 +1038,32 @@ static void m_uid(sourceinfo_t *si, int parc, char *parv[])
 	 * note: you can't rely on realname being p[10], it's actually p[parc - 1].
 	 * reason being that mode params may exist in p[9]+, or not at all.
 	 */
-	if (parc >= 10)
-	{
-		slog(LG_DEBUG, "m_uid(): new user on `%s': %s", si->s->name, parv[2]);
+	slog(LG_DEBUG, "m_uid(): new user on `%s': %s", si->s->name, parv[2]);
 
-		/* char *nick, char *user, char *host, char *vhost, char *ip, char *uid, char *gecos, server_t *server, unsigned int ts */ 
-		u = user_add(parv[2], parv[5], parv[3], parv[4], parv[6], parv[0], parv[parc - 1], si->s, atol(parv[1]));
-		if (u == NULL)
-			return;
-		user_mode(u, parv[8]);
+	/* char *nick, char *user, char *host, char *vhost, char *ip, char *uid, char *gecos, server_t *server, unsigned int ts */
+	u = user_add(parv[2], parv[5], parv[3], parv[4], parv[6], parv[0], parv[parc - 1], si->s, atol(parv[1]));
+	if (u == NULL)
+		return;
+	user_mode(u, parv[8]);
 
-		/* If server is not yet EOB we will do this later.
-		 * This avoids useless "please identify" -- jilles */
-		if (si->s->flags & SF_EOB)
-			handle_nickchange(u);
-	}
-	else
-	{
-		int i;
-		slog(LG_DEBUG, "m_uid(): got UID with wrong number of params");
-
-		for (i = 0; i < parc; i++)
-			slog(LG_DEBUG, "m_uid():   parv[%d] = %s", i, parv[i]);
-	}
+	/* If server is not yet EOB we will do this later.
+	 * This avoids useless "please identify" -- jilles */
+	if (si->s->flags & SF_EOB)
+		handle_nickchange(u);
 }
 
 static void m_nick(sourceinfo_t *si, int parc, char *parv[])
 {
-	/* if it's only 1 then it's a nickname change, if it's 2, it's a nickname change with a TS */
-	if (parc == 1 || parc == 2)
-	{
-                if (!si->su)
-                {       
-                        slog(LG_DEBUG, "m_nick(): server trying to change nick: %s", si->s != NULL ? si->s->name : "<none>");
-                        return;
-                }
+	slog(LG_DEBUG, "m_nick(): nickname change from `%s': %s", si->su->nick, parv[0]);
 
-		slog(LG_DEBUG, "m_nick(): nickname change from `%s': %s", si->su->nick, parv[0]);
+	if (user_changenick(si->su, parv[0], atoi(parv[1])))
+		return;
 
-		if (user_changenick(si->su, parv[0], parc == 2 ? atoi(parv[1]) : CURRTIME))
-			return;
-
-		/* It could happen that our PING arrived late and the
-		 * server didn't acknowledge EOB yet even though it is
-		 * EOB; don't send double notices in that case -- jilles */
-		if (si->su->server->flags & SF_EOB)
-			handle_nickchange(si->su);
-	}
-	else
-	{
-		int i;
-		slog(LG_DEBUG, "m_nick(): got NICK with wrong number of params");
-
-		for (i = 0; i < parc; i++)
-			slog(LG_DEBUG, "m_nick():   parv[%d] = %s", i, parv[i]);
-	}
+	/* It could happen that our PING arrived late and the
+	 * server didn't acknowledge EOB yet even though it is
+	 * EOB; don't send double notices in that case -- jilles */
+	if (si->su->server->flags & SF_EOB)
+		handle_nickchange(si->su);
 }
 
 static void m_quit(sourceinfo_t *si, int parc, char *parv[])
@@ -1203,13 +1198,14 @@ static void m_squit(sourceinfo_t *si, int parc, char *parv[])
 static void m_server(sourceinfo_t *si, int parc, char *parv[])
 {
 	server_t *s;
+	char ver[BUFSIZE];
 
 	slog(LG_DEBUG, "m_server(): new server: %s", parv[0]);
 	if (si->s == NULL)
 	{
 		sts(":%s BURST", me.numeric);
-		sts(":%s VERSION :%s. %s %s",
-				me.name, PACKAGE_STRING, me.numeric, get_conf_opts());
+		get_version_string(ver, sizeof(ver));
+		sts(":%s VERSION :%s", me.numeric, ver);
 		services_init();
 		sts(":%s ENDBURST", me.numeric);
 	}
@@ -1248,7 +1244,7 @@ static void m_admin(sourceinfo_t *si, int parc, char *parv[])
 
 static void m_away(sourceinfo_t *si, int parc, char *parv[])
 {
-	handle_away(si->su, parc >= 1 ? parv[0] : NULL);
+	handle_away(si->su, parc >= 1 ? parv[parc-1] : NULL);
 }
 
 static void m_join(sourceinfo_t *si, int parc, char *parv[])
@@ -1266,20 +1262,38 @@ static void m_join(sourceinfo_t *si, int parc, char *parv[])
 	chanuser_add(c, si->su->nick);
 }
 
-static void m_svsnick(sourceinfo_t *si, int parc, char *parv[])
+static void m_save(sourceinfo_t *si, int parc, char *parv[])
 {
-	si->su = user_find(parv[0]);
-	if (si->su == NULL || si->su->ts != atoi(parv[2]))
+	user_t *u = user_find(parv[0]);
+	if (!u)
 		return;
-	if (is_internal_client(si->su))
+
+	if (u->ts != atoi(parv[1]))
 	{
-		// we've already killed the colliding user in user_add/user_changenick
-		// XXX this could cause a services fight if we get desynced and haven't killed the camper
-		sts(":%s NICK %s %lu", si->su->uid, si->su->nick, (unsigned long)si->su->ts);
+		slog(LG_DEBUG, "m_save(): ignoring SAVE message for %s, TS doesnt match (%lu != %s)", u->nick, (unsigned long)u->ts, parv[1]);
+		return;
+	}
+
+	if (!strcmp(u->nick, u->uid))
+	{
+		slog(LG_DEBUG, "m_save(): ignoring noop SAVE message for %s", u->nick);
+		return;
+	}
+
+	if (is_internal_client(u))
+	{
+		slog(LG_INFO, "m_save(): service %s got hit, changing back", u->nick);
+		sts(":%s NICK %s %lu", u->uid, u->nick, (unsigned long) u->ts);
+		/* XXX services wars */
 	}
 	else
 	{
-		m_nick(si, 2, &parv[1]);
+		slog(LG_DEBUG, "m_save(): nickname change for `%s': %s", u->nick, u->uid);
+
+		if (user_changenick(u, u->uid, 0))
+			return;
+
+		handle_nickchange(u);
 	}
 }
 
@@ -1292,7 +1306,7 @@ static void m_idle(sourceinfo_t *si, int parc, char *parv[])
 {
 	if (parc == 1 && si->su != NULL)
 	{
-		sts(":%s IDLE %s %lu 0", parv[0], si->su->nick, (unsigned long)CURRTIME);
+		sts(":%s IDLE %s 0 0", parv[0], si->su->uid);
 	}
 	else
 	{
@@ -1308,6 +1322,12 @@ static void m_opertype(sourceinfo_t *si, int parc, char *parv[])
 	 * purposes, or not. --w00t
 	 */
 	user_mode(si->su, "+o");
+}
+
+static void m_fident(sourceinfo_t *si, int parc, char *parv[])
+{
+	strshare_unref(si->su->user);
+	si->su->user = strshare_get(parv[0]);
 }
 
 static void m_fhost(sourceinfo_t *si, int parc, char *parv[])
@@ -1330,6 +1350,7 @@ static void m_encap(sourceinfo_t *si, int parc, char *parv[])
 		smsg.mode = *parv[4];
 		smsg.buf = parv[5];
 		smsg.ext = parc >= 6 ? parv[6] : NULL;
+		smsg.server = si->s ? si->s : NULL;
 		hook_call_sasl_input(&smsg);
 	}
 }
@@ -1339,7 +1360,7 @@ static inline void verify_mlock(channel_t *c, time_t ts, const char *their_mlock
 	const char *mlock_str;
 	mychan_t *mc;
 
-	mc = MYCHAN_FROM(c);
+	mc = mychan_from(c);
 	if (mc == NULL)
 		return;
 
@@ -1350,6 +1371,18 @@ static inline void verify_mlock(channel_t *c, time_t ts, const char *their_mlock
 	mlock_str = mychan_get_sts_mlock(mc);
 	if (strcmp(mlock_str, their_mlock))
 		return mlock_sts(c);
+}
+
+static void verify_topiclock(channel_t *c, bool state)
+{
+	bool mystate;
+	mychan_t *mc = mychan_from(c);
+	if (!mc)
+		return;
+
+	mystate = mc->flags & MC_TOPICLOCK;
+	if (state != mystate)
+		inspircd_topiclock_sts(c);
 }
 
 /*
@@ -1386,8 +1419,6 @@ static void m_metadata(sourceinfo_t *si, int parc, char *parv[])
 
 		if (parv[2][0] == '\0')
 			handle_clearlogin(si, u);
-		else if (si->s->flags & SF_EOB)
-			handle_setlogin(si, u, parv[2], 0);
 		else
 			handle_burstlogin(u, parv[2], 0);
 	}
@@ -1425,6 +1456,13 @@ static void m_metadata(sourceinfo_t *si, int parc, char *parv[])
 	{
 		c = channel_find(parv[0]);
 		verify_mlock(c, 0, parv[2]);
+	}
+	else if (!irccasecmp(parv[1], "topiclock"))
+	{
+		bool state = (!strcmp(parv[2], "1"));
+		c = channel_find(parv[0]);
+		if (c)
+			verify_topiclock(c, state);
 	}
 }
 
@@ -1469,16 +1507,27 @@ static void m_capab(sourceinfo_t *si, int parc, char *parv[])
 		has_svstopic_topiclock = false;
 		has_protocol = 0;
 
+		/* InspIRCd 2.0 and newer sends the protocol version in CAPAB START,
+		 * if there is none sent then we can be sure it's an unsupported version.
+		 */
 		if (parc > 1)
 			has_protocol = atoi(parv[1]);
+		if (has_protocol == 1203 || has_protocol == 1204)
+		{
+			slog(LG_ERROR, "m_capab(): InspIRCd 2.1 beta is not supported.");
+			exit(EXIT_FAILURE);
+		}
+		else if (has_protocol < PROTOCOL_MINIMUM)
+		{
+			slog(LG_ERROR, "m_capab(): remote protocol version too old (%d). you may need another protocol module or a newer inspircd. exiting.", has_protocol);
+			exit(EXIT_FAILURE);
+		}
 	}
 	else if (strcasecmp(parv[0], "CAPABILITIES") == 0 && parc > 1)
 	{
 		varc = sjtoken(parv[1], ' ', varv);
 		for (i = 0; i < varc; i++)
 		{
-			if (!strncmp(varv[i], "PROTOCOL=", 9))
-				has_protocol = atoi(varv[i] + 9);
 			if(!strncmp(varv[i], "PREFIX=", 7))
 			{
 				if (strstr(varv[i] + 7, "q"))
@@ -1494,15 +1543,17 @@ static void m_capab(sourceinfo_t *si, int parc, char *parv[])
 					ircd->uses_halfops = true;
 				}
 			}
+			else if (!strcmp(varv[i], "GLOBOPS=1"))
+			{
+				has_globopsmod = true;
+			}
 			/* XXX check/store CHANMAX/IDENTMAX */
 		}
 	}
 	else if ((strcasecmp(parv[0], "MODULES") == 0 || strcasecmp(parv[0], "MODSUPPORT") == 0) && parc > 1)
 	{
-		if (strstr(parv[1], "m_hideoper.so"))
-		{
-			has_hideopermod = true;
-		}	
+		char *it = NULL;
+
 		if (strstr(parv[1], "m_services_account.so"))
 		{
 			has_servicesmod = true;
@@ -1523,14 +1574,6 @@ static void m_capab(sourceinfo_t *si, int parc, char *parv[])
 		{
 			has_cbanmod = true;
 		}
-		if (strstr(parv[1], "m_hidechans.so"))
-		{
-			has_hidechansmod = true;
-		}
-		if (strstr(parv[1], "m_servprotect.so"))
-		{
-			has_servprotectmod = true;
-		}
 		if (strstr(parv[1], "m_svshold.so"))
 		{
 			has_svshold = true;
@@ -1543,13 +1586,26 @@ static void m_capab(sourceinfo_t *si, int parc, char *parv[])
 		{
 			has_svstopic_topiclock = true;
 		}
+		if ((it = strstr(parv[1], "m_kicknorejoin.so")) != NULL)
+		{
+			it = strchr(it, '=');
+			if (it)
+				max_rejoindelay = atoi(it + 1);
+		}
 		TAINT_ON(strstr(parv[1], "m_invisible.so") != NULL, "invisible (m_invisible) is not presently supported correctly in atheme, and won't be due to ethical obligations");
-		TAINT_ON(strstr(parv[1], "m_serverbots.so") != NULL, "inspircd built-in services (m_serverbots) are not compatible with atheme");
-		TAINT_ON(strstr(parv[1], "m_chanacl.so") != NULL, "inspircd built-in services (m_chanacl) are not compatible with atheme");
-		TAINT_ON(strstr(parv[1], "m_chanregister.so") != NULL, "inspircd built-in services (m_chanregister) are not compatible with atheme");
-		TAINT_ON(strstr(parv[1], "m_nickregister.so") != NULL, "inspircd built-in services (m_nickregister) are not compatible with atheme");
-		TAINT_ON(strstr(parv[1], "m_namedmodes.so") != NULL, "namedmodes (m_namedmodes) are unsupported in Atheme due to the fact that any network can change modes around thus possibly breaking mlocks");
-		TAINT_ON(strstr(parv[1], "m_opflags.so") != NULL, "inspircd built-in services (m_opflags) are not compatible with atheme");
+	}
+	else if (strcasecmp(parv[0], "USERMODES") == 0 && parc > 1)
+	{
+		varc = sjtoken(parv[1], ' ', varv);
+		for (i = 0; i < varc; i++)
+		{
+			if (!strcmp(varv[i], "hidechans=I"))
+				has_hidechansmod = true;
+			else if (!strcmp(varv[i], "hideoper=H"))
+				has_hideopermod = true;
+			else if (!strcmp(varv[i], "servprotect=k"))
+				has_servprotectmod = true;
+		}
 	}
 	else if (strcasecmp(parv[0], "END") == 0)
 	{
@@ -1573,16 +1629,6 @@ static void m_capab(sourceinfo_t *si, int parc, char *parv[])
 		{
 			slog(LG_INFO, "m_capab(): you didn't load m_svshold into inspircd. nickname enforcers will not work.");
 		}
-
-		if (has_protocol && (has_protocol < PROTOCOL_12BETA))
-		{
-			slog(LG_ERROR, "m_capab(): remote protocol version too old (%d). you may need another protocol module or a newer inspircd. exiting.", has_protocol);
-			exit(EXIT_FAILURE);
-		}
-	}
-	else
-	{
-		slog(LG_DEBUG, "m_capab(): unknown CAPAB type %s - out of date protocol module?", parv[0]);
 	}
 }
 
@@ -1635,9 +1681,13 @@ void _modinit(module_t * m)
 	holdnick_sts = &inspircd_holdnick_sts;
 	svslogin_sts = &inspircd_svslogin_sts;
 	sasl_sts = &inspircd_sasl_sts;
+	sasl_mechlist_sts = &inspircd_sasl_mechlist_sts;
 	quarantine_sts = &inspircd_quarantine_sts;
 	mlock_sts = &inspircd_mlock_sts;
 	topiclock_sts = &inspircd_topiclock_sts;
+	is_extban = &inspircd_is_extban;
+	dline_sts = &inspircd_dline_sts;
+	undline_sts = &inspircd_undline_sts;
 
 	mode_list = inspircd_mode_list;
 	ignore_mode_list = inspircd_ignore_mode_list;
@@ -1654,14 +1704,14 @@ void _modinit(module_t * m)
 	pcommand_add("NOTICE", m_notice, 2, MSRC_USER | MSRC_SERVER | MSRC_UNREG);
 	pcommand_add("FJOIN", m_fjoin, 3, MSRC_SERVER);
 	pcommand_add("PART", m_part, 1, MSRC_USER);
-	pcommand_add("NICK", m_nick, 1, MSRC_USER | MSRC_SERVER);
-	pcommand_add("UID", m_uid, 9, MSRC_SERVER);
+	pcommand_add("NICK", m_nick, 2, MSRC_USER);
+	pcommand_add("UID", m_uid, 10, MSRC_SERVER);
 	pcommand_add("QUIT", m_quit, 1, MSRC_USER);
 	pcommand_add("MODE", m_mode, 2, MSRC_USER | MSRC_SERVER);
 	pcommand_add("FMODE", m_fmode, 3, MSRC_USER | MSRC_SERVER);
-	pcommand_add("SVSNICK", m_svsnick, 3, MSRC_USER | MSRC_SERVER);
 	pcommand_add("KICK", m_kick, 2, MSRC_USER | MSRC_SERVER);
 	pcommand_add("KILL", m_kill, 1, MSRC_USER | MSRC_SERVER);
+	pcommand_add("SAVE", m_save, 2, MSRC_SERVER);
 	pcommand_add("SQUIT", m_squit, 1, MSRC_USER | MSRC_SERVER);
 	pcommand_add("RSQUIT", m_rsquit, 1, MSRC_USER);
 	pcommand_add("SERVER", m_server, 4, MSRC_UNREG | MSRC_SERVER);
@@ -1672,6 +1722,7 @@ void _modinit(module_t * m)
 	pcommand_add("JOIN", m_join, 1, MSRC_USER);
 	pcommand_add("ERROR", m_error, 1, MSRC_UNREG | MSRC_SERVER);
 	pcommand_add("TOPIC", m_topic, 2, MSRC_USER);
+	pcommand_add("FIDENT", m_fident, 1, MSRC_USER);
 	pcommand_add("FHOST", m_fhost, 1, MSRC_USER);
 	pcommand_add("IDLE", m_idle, 1, MSRC_USER);
 	pcommand_add("AWAY", m_away, 0, MSRC_USER);

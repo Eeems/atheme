@@ -110,11 +110,14 @@ static void os_cmd_rakill(sourceinfo_t *si, int parc, char *parv[])
 		{
 			/* match */
 			command_success_nodata(si, _("\2Match:\2  %s!%s@%s %s - akilling"), u->nick, u->user, u->host, u->gecos);
-			kline_sts("*", "*", u->host, 604800, reason);
+			if (! (u->flags & UF_KLINESENT)) {
+				kline_sts("*", "*", u->host, 604800, reason);
+				u->flags |= UF_KLINESENT;
+			}
 			matches++;
 		}
 	}
-	
+
 	regex_destroy(regex);
 	command_success_nodata(si, _("\2%d\2 matches for %s akilled."), matches, pattern);
 	logcommand(si, CMDLOG_ADMIN, "RAKILL: \2%s\2 (reason: \2%s\2) (\2%d\2 matches)", pattern, reason, matches);

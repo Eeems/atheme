@@ -56,13 +56,6 @@ static void cmd_voice(sourceinfo_t *si, bool voicing, int parc, char *parv[])
 		return;
 	}
 
-	if (!chanacs_source_has_flag(mc, si, CA_VOICE) && (tu != si->su ||
-				!chanacs_source_has_flag(mc, si, CA_AUTOVOICE)))
-	{
-		command_fail(si, fault_noprivs, _("You are not authorized to perform this operation."));
-		return;
-	}
-	
 	if (metadata_find(mc, "private:close:closer"))
 	{
 		command_fail(si, fault_noprivs, _("\2%s\2 is closed."), chan);
@@ -83,6 +76,12 @@ static void cmd_voice(sourceinfo_t *si, bool voicing, int parc, char *parv[])
 		if (!(tu = user_find_named(nick)))
 		{
 			command_fail(si, fault_nosuch_target, _("\2%s\2 is not online."), nick);
+			continue;
+		}
+
+		if (!chanacs_source_has_flag(mc, si, CA_VOICE) && (tu != si->su || !chanacs_source_has_flag(mc, si, CA_AUTOVOICE)))
+		{
+			command_fail(si, fault_noprivs, _("You are not authorized to (de)voice \2%s\2 on \2%s\2."), nick, mc->name);
 			continue;
 		}
 

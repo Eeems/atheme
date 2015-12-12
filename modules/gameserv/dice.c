@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2005-2007 William Pitcock <nenolod@nenolod.net>
  * Copyright (c) 2006-2007 Jilles Tjoelker <jilles@stack.nl>
- * 
+ *
  * Rights to this code are documented in doc/LICENSE.
  *
  * Dice generator.
@@ -21,22 +21,40 @@ static void command_calc(sourceinfo_t *si, int parc, char *parv[]);
 command_t cmd_dice = { "ROLL", N_("Rolls one or more dice."), AC_NONE, 3, command_dice, {.path = "gameserv/roll"} };
 command_t cmd_calc = { "CALC", N_("Calculate stuff."), AC_NONE, 3, command_calc, {.path = "gameserv/calc"} };
 
+static unsigned int max_rolls = 10;
+
 void _modinit(module_t * m)
 {
-	service_named_bind_command("gameserv", &cmd_dice);
-	service_named_bind_command("gameserv", &cmd_calc);
+	service_t *svs;
 
 	service_named_bind_command("chanserv", &cmd_dice);
 	service_named_bind_command("chanserv", &cmd_calc);
+
+	svs = service_find("gameserv");
+	if (!svs)
+		return;
+
+	service_bind_command(svs, &cmd_dice);
+	service_bind_command(svs, &cmd_calc);
+
+	add_uint_conf_item("MAX_ROLLS", &svs->conf_table, 0, &max_rolls, 1, INT_MAX, 10);
 }
 
 void _moddeinit(module_unload_intent_t intent)
 {
-	service_named_unbind_command("gameserv", &cmd_dice);
-	service_named_unbind_command("gameserv", &cmd_calc);
+	service_t *svs;
 
 	service_named_unbind_command("chanserv", &cmd_dice);
 	service_named_unbind_command("chanserv", &cmd_calc);
+
+	svs = service_find("gameserv");
+	if (!svs)
+		return;
+
+	service_unbind_command(svs, &cmd_dice);
+	service_unbind_command(svs, &cmd_calc);
+
+	del_conf_item("MAX_ROLLS", &svs->conf_table);
 }
 
 #define CALC_MAX_STACK		(128)
@@ -58,10 +76,10 @@ int is_calcoper(char oper);
 // !   = Logical NOT               |
 // d   = Dice Generator, LOL.      |  [Rank 5]
 //                                 |  &   = Bitwise AND
-// [Rank 2]                        |  
+// [Rank 2]                        |
 // ^   = Power                     |  [Rank 6]
 //                                 |  $   = Bitwise XOR (eXclusive OR)
-// [Rank 3]                        |  
+// [Rank 3]                        |
 // * / = Multiply / Divide         |  [Rank 7]
 // % \ = Modulus / Integer-divide  |  |   = Bitwise inclusive OR
 //
@@ -82,7 +100,7 @@ static bool eval_calc(sourceinfo_t *si, char *s_input)
 	}
 
 	// Skip leading whitespace
-	while (*ci && isspace(*ci))
+	while (*ci && isspace((unsigned char)*ci))
 		ci++;
 
 	if (!*ci)
@@ -103,7 +121,7 @@ static bool eval_calc(sourceinfo_t *si, char *s_input)
 			if (--braces < 0)
 				break;	// mismatched!
 		}
-		else if (!isspace(*ci) && !isdigit(*ci) && *ci != '.' && !is_calcoper(*ci))
+		else if (!isspace((unsigned char)*ci) && !isdigit((unsigned char)*ci) && *ci != '.' && !is_calcoper(*ci))
 		{
 			command_fail(si, fault_badparams, _("Error: You typed an invalid expression."));
 			return false;
@@ -299,7 +317,7 @@ int do_calc_expr(sourceinfo_t *si, char *expr, char *errmsg, double *presult)
 			return 1;
 		}
 		// skip whitespace
-		while (*cur && isspace(*cur))
+		while (*cur && isspace((unsigned char)*cur))
 			cur++;
 	}
 
@@ -448,16 +466,16 @@ static bool eval_dice(sourceinfo_t *si, char *s_input)
 	unsigned int dice, roll, x, y, z = 0;
 	double total;
 
-	while (*c && isspace(*c))
+	while (*c && isspace((unsigned char)*c))
 		++c;
-	if (!*c || !isdigit(*c))
+	if (!*c || !isdigit((unsigned char)*c))
 	{
 		gs_command_report(si, _("Syntax: XdY [ {-|+|*|/} Z ]"));
 		return false;
 	}
 
 	x = strtoul(c, &c, 10);
-	if (x == 0 || c == NULL || ToLower(*c++) != 'd' || !isdigit(*c))
+	if (x == 0 || c == NULL || ToLower(*c++) != 'd' || !isdigit((unsigned char)*c))
 	{
 		if (x < 1 || x > DICE_MAX_DICE)
 		{
@@ -472,7 +490,7 @@ static bool eval_dice(sourceinfo_t *si, char *s_input)
 	y = strtoul(c, &c, 10);
 	if (c != NULL)
 	{
-		while (*c && isspace(*c))
+		while (*c && isspace((unsigned char)*c))
 			++c;
 
 		if (*c && strchr("-+*/", *c) == NULL)
@@ -500,7 +518,7 @@ static bool eval_dice(sourceinfo_t *si, char *s_input)
 
 		z = strtoul(c, &c, 10);
 
-		while (*c && isspace(*c))
+		while (*c && isspace((unsigned char)*c))
 			++c;
 
 		if (*c)
@@ -576,8 +594,8 @@ static void command_dice(sourceinfo_t *si, int parc, char *parv[])
 		times = atoi(parv[0]);
 		arg = parv[1];
 
-		if (times > 10)
-			times = 10;
+		if (times > max_rolls)
+			times = max_rolls;
 	}
 
 	if (!strcasecmp("RICK", arg))
@@ -614,8 +632,8 @@ static void command_calc(sourceinfo_t *si, int parc, char *parv[])
 		times = atoi(parv[0]);
 		arg = parv[1];
 
-		if (times > 10)
-			times = 10;
+		if (times > max_rolls)
+			times = max_rolls;
 	}
 
 	for (i = 0; i < times; i++)

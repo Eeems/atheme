@@ -40,7 +40,7 @@ static void cs_cmd_info(sourceinfo_t *si, int parc, char *parv[])
 	metadata_t *md;
 	mowgli_patricia_iteration_state_t state;
 	hook_channel_req_t req;
-	bool hide_info;
+	bool hide_info, hide_acl;
 
 	if (!name)
 	{
@@ -71,17 +71,19 @@ static void cs_cmd_info(sourceinfo_t *si, int parc, char *parv[])
 	hide_info = use_channel_private && mc->flags & MC_PRIVATE &&
 		!chanacs_source_has_flag(mc, si, CA_ACLVIEW) &&
 		!has_priv(si, PRIV_CHAN_AUSPEX);
+	hide_acl = !chanacs_source_has_flag(mc, si, CA_ACLVIEW) &&
+		!has_priv(si, PRIV_CHAN_AUSPEX) &&
+		!(mc->flags & MC_PUBACL);
 
 	tm = *localtime(&mc->registered);
 	strftime(strfbuf, sizeof strfbuf, TIME_FORMAT, &tm);
 
 	command_success_nodata(si, _("Information on \2%s\2:"), mc->name);
 
-	if (!hide_info)
+	if (!(hide_info && hide_acl))
 		command_success_nodata(si, _("Founder    : %s"), mychan_founder_names(mc));
 
-	if (chanacs_source_has_flag(mc, si, CA_ACLVIEW) ||
-		has_priv(si, PRIV_CHAN_AUSPEX))
+	if (!hide_acl)
 	{
 		mu = mychan_pick_successor(mc);
 		if (mu != NULL)
@@ -125,7 +127,7 @@ static void cs_cmd_info(sourceinfo_t *si, int parc, char *parv[])
 	if (!hide_info && (md = metadata_find(mc, "email")))
 		command_success_nodata(si, "Email      : %s", md->value);
 
-	if ((!hide_info || (si->su != NULL && chanuser_find(mc->chan, si->su))) && 
+	if ((!hide_info || (si->su != NULL && chanuser_find(mc->chan, si->su))) &&
 			(md = metadata_find(mc, "private:entrymsg")))
 		command_success_nodata(si, "Entrymsg   : %s", md->value);
 
@@ -205,6 +207,14 @@ static void cs_cmd_info(sourceinfo_t *si, int parc, char *parv[])
 		strcat(buf, "GUARD");
 	}
 
+	if (MC_ANTIFLOOD & mc->flags)
+	{
+		if (*buf)
+			strcat(buf, " ");
+
+		strcat(buf, "ANTIFLOOD");
+	}
+
 	if (chansvs.fantasy && !metadata_find(mc, "disable_fantasy"))
 	{
 		if (*buf)
@@ -219,6 +229,14 @@ static void cs_cmd_info(sourceinfo_t *si, int parc, char *parv[])
 			strcat(buf, " ");
 
 		strcat(buf, "PRIVATE");
+	}
+
+	if (MC_PUBACL & mc->flags)
+	{
+		if (*buf)
+			strcat(buf, " ");
+
+		strcat(buf, "PUBACL");
 	}
 
 	if (use_limitflags && MC_LIMITFLAGS & mc->flags)

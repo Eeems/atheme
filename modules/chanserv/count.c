@@ -57,7 +57,7 @@ static void cs_cmd_count(sourceinfo_t *si, int parc, char *parv[])
 		return;
 	}
 
-	if (!chanacs_source_has_flag(mc, si, CA_ACLVIEW))
+	if (!(mc->flags & MC_PUBACL) && !chanacs_source_has_flag(mc, si, CA_ACLVIEW))
 	{
 		if (has_priv(si, PRIV_CHAN_AUSPEX))
 			operoverride = true;
@@ -67,7 +67,7 @@ static void cs_cmd_count(sourceinfo_t *si, int parc, char *parv[])
 			return;
 		}
 	}
-	
+
 	if (metadata_find(mc, "private:close:closer"))
 	{
 		command_fail(si, fault_noprivs, _("\2%s\2 is closed."), chan);

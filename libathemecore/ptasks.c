@@ -41,17 +41,23 @@ void handle_info(user_t *u)
 	numeric_sts(me.me, 374, u, ":End of /INFO list");
 }
 
-void handle_version(user_t *u)
+int get_version_string(char *buf, size_t bufsize)
 {
 	const crypt_impl_t *ci = crypt_get_default_provider();
+	return snprintf(buf, bufsize, "%s. %s %s :%s [%s] [enc:%s] Build Date: %s",
+		PACKAGE_STRING, me.name, revision, get_conf_opts(), ircd->ircdname, ci->id, __DATE__);
+}
 
+void handle_version(user_t *u)
+{
 	if (u == NULL)
 		return;
 	if (floodcheck(u, NULL))
 		return;
 
-	numeric_sts(me.me, 351, u, "%s. %s %s :%s [%s] [enc:%s] Build Date: %s",
-		    PACKAGE_STRING, me.name, revision, get_conf_opts(), ircd->ircdname, ci->id, __DATE__);
+	char ver[BUFSIZE];
+	get_version_string(ver, sizeof(ver));
+	numeric_sts(me.me, 351, u, "%s", ver);
 }
 
 void handle_admin(user_t *u)
@@ -329,7 +335,7 @@ void handle_whois(user_t *u, const char *target)
 		if (t->flags & UF_AWAY)
 			numeric_sts(me.me, 301, u, "%s :Gone", t->nick);
 		if (is_ircop(t))
-			numeric_sts(me.me, 313, u, "%s :%s", t->nick, is_internal_client(t) ? "is a Network Service" : "is an IRC Operator");
+			numeric_sts(me.me, 313, u, "%s :%s", t->nick, is_service(t) ? "is a Network Service" : "is an IRC Operator");
 		if (t->myuser && !(t->myuser->flags & MU_WAITAUTH))
 			numeric_sts(me.me, 330, u, "%s %s :is logged in as", t->nick, entity(t->myuser)->name);
 	}
@@ -584,11 +590,11 @@ void handle_message(sourceinfo_t *si, char *target, bool is_notice, char *messag
 			notice(target_u->nick, si->su->nick, "This is a registered nick enforcer, and not a real user.");
 			return;
 		}
-		if (!is_notice && (isalnum(target[0]) || strchr("[\\]^_`{|}~", target[0])))
+		if (!is_notice && (isalnum((unsigned char)target[0]) || strchr("[\\]^_`{|}~", target[0])))
 		{
 			/* If it's not a notice and looks like a nick or
 			 * user@server, send back an error message */
-			if (strchr(target, '@') || !ircd->uses_uid || (!ircd->uses_p10 && !isdigit(target[0])))
+			if (strchr(target, '@') || !ircd->uses_uid || (!ircd->uses_p10 && !isdigit((unsigned char)target[0])))
 				numeric_sts(me.me, 401, si->su, "%s :No such nick", target);
 			else
 				numeric_sts(me.me, 401, si->su, "* :Target left IRC. Failed to deliver: [%.20s]", message);
@@ -818,9 +824,6 @@ void handle_eob(server_t *s)
 		if (s2->flags & SF_EOB2)
 			handle_eob(s2);
 	}
-	/* Reseed RNG now we have a little more data to seed with */
-	if (s->uplink == me.me)
-		srand(rand() ^ ((CURRTIME << 20) + cnt.user + (cnt.chanuser << 12)) ^ (cnt.chan << 17) ^ ~cnt.bin);
 }
 
 /* Received a message from a user, check if they are flooding

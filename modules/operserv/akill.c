@@ -60,7 +60,7 @@ void _moddeinit(module_unload_intent_t intent)
 	command_delete(&os_akill_del, os_akill_cmds);
 	command_delete(&os_akill_list, os_akill_cmds);
 	command_delete(&os_akill_sync, os_akill_cmds);
-	
+
 	hook_del_user_add(os_akill_newuser);
 
 	mowgli_patricia_destroy(os_akill_cmds, NULL, NULL);
@@ -85,7 +85,10 @@ static void os_akill_newuser(hook_user_nick_t *data)
 		 * not send a KILL. -- jilles */
 		char reason[BUFSIZE];
 		snprintf(reason, sizeof(reason), "[#%lu] %s", k->number, k->reason);
-		kline_sts("*", k->user, k->host, k->duration ? k->expires - CURRTIME : 0, reason);
+		if (! (u->flags & UF_KLINESENT)) {
+			kline_sts("*", k->user, k->host, k->duration ? k->expires - CURRTIME : 0, reason);
+			u->flags |= UF_KLINESENT;
+		}
 	}
 }
 
@@ -94,7 +97,7 @@ static void os_cmd_akill(sourceinfo_t *si, int parc, char *parv[])
 	/* Grab args */
 	char *cmd = parv[0];
         command_t *c;
-	
+
 	/* Bad/missing arg */
 	if (!cmd)
 	{
@@ -153,7 +156,7 @@ static void os_cmd_akill_add(sourceinfo_t *si, int parc, char *parv[])
 		if (s)
 		{
 			duration = (atol(s) * 60);
-			while (isdigit(*s))
+			while (isdigit((unsigned char)*s))
 				s++;
 			if (*s == 'h' || *s == 'H')
 				duration *= 60;
@@ -189,7 +192,7 @@ static void os_cmd_akill_add(sourceinfo_t *si, int parc, char *parv[])
 		{
 			mowgli_strlcat(reason, " ", BUFSIZE);
 			mowgli_strlcat(reason, treason, BUFSIZE);
-		}			
+		}
 	}
 
 	if (strchr(target,'!'))
@@ -286,7 +289,7 @@ static void os_cmd_akill_add(sourceinfo_t *si, int parc, char *parv[])
 	else
 		command_success_nodata(si, _("AKILL on \2%s@%s\2 was successfully added."), k->user, k->host);
 
-	verbose_wallops("\2%s\2 is \2adding\2 an \2AKILL\2 for \2%s@%s\2 -- reason: \2%s\2", get_oper_name(si), k->user, k->host, 
+	verbose_wallops("\2%s\2 is \2adding\2 an \2AKILL\2 for \2%s@%s\2 -- reason: \2%s\2", get_oper_name(si), k->user, k->host,
 		k->reason);
 
 	if (duration)
@@ -473,7 +476,7 @@ static void os_cmd_akill_list(sourceinfo_t *si, int parc, char *parv[])
 			host = param;
 			full = true;
 		}
-		else if (isdigit(param[0]) &&
+		else if (isdigit((unsigned char)param[0]) &&
 				(num = strtoul(param, NULL, 10)) != 0)
 			full = true;
 		else
@@ -482,7 +485,7 @@ static void os_cmd_akill_list(sourceinfo_t *si, int parc, char *parv[])
 			return;
 		}
 	}
-	
+
 	if (user || host || num)
 		command_success_nodata(si, _("AKILL list matching given criteria (with reasons):"));
 	else if (full)

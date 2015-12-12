@@ -129,7 +129,12 @@ myuser_t *myuser_add_id(const char *id, const char *name, const char *pass, cons
 	mu->email = strshare_get(email);
 	mu->email_canonical = canonicalize_email(email);
 	if (id)
-		mowgli_strlcpy(entity(mu)->id, id, sizeof(entity(mu)->id));
+	{
+		if (myentity_find_uid(id) == NULL)
+			mowgli_strlcpy(entity(mu)->id, id, sizeof(entity(mu)->id));
+		else
+			entity(mu)->id[0] = '\0';
+	}
 	else
 		entity(mu)->id[0] = '\0';
 
@@ -430,7 +435,7 @@ void myuser_set_email(myuser_t *mu, const char *newemail)
  *
  * Side Effects:
  *      - none
- */ 
+ */
 myuser_t *myuser_find_ext(const char *name)
 {
 	user_t *u;
@@ -1208,25 +1213,25 @@ const char *mychan_get_mlock(mychan_t *mc)
 	if (mc->mlock_on)
 	{
 		if (dir != MTYPE_ADD)
-			dir = MTYPE_ADD, strcat(buf, "+");
-		strcat(buf, flags_to_string(mc->mlock_on));
+			dir = MTYPE_ADD, mowgli_strlcat(buf, "+", sizeof buf);
+		mowgli_strlcat(buf, flags_to_string(mc->mlock_on), sizeof buf);
 	}
 
 	if (mc->mlock_limit)
 	{
 		if (dir != MTYPE_ADD)
-			dir = MTYPE_ADD, strcat(buf, "+");
-		strcat(buf, "l");
-		strcat(params, " ");
-		strcat(params, number_to_string(mc->mlock_limit));
+			dir = MTYPE_ADD, mowgli_strlcat(buf, "+", sizeof buf);
+		mowgli_strlcat(buf, "l", sizeof buf);
+		mowgli_strlcat(params, " ", sizeof params);
+		mowgli_strlcat(params, number_to_string(mc->mlock_limit), sizeof params);
 	}
 
 	if (mc->mlock_key)
 	{
 		if (dir != MTYPE_ADD)
-			dir = MTYPE_ADD, strcat(buf, "+");
-		strcat(buf, "k");
-		strcat(params, " *");
+			dir = MTYPE_ADD, mowgli_strlcat(buf, "+", sizeof buf);
+		mowgli_strlcat(buf, "k", sizeof buf);
+		mowgli_strlcat(params, " *", sizeof params);
 	}
 
 	if (md)
@@ -1240,7 +1245,7 @@ const char *mychan_get_mlock(mychan_t *mc)
 				if (dir != MTYPE_ADD)
 					dir = MTYPE_ADD, *q++ = '+';
 				*q++ = *p++;
-				strcat(params, " ");
+				mowgli_strlcat(params, " ", sizeof params);
 				qq = params + strlen(params);
 				while (*p != '\0' && *p != ' ')
 					*qq++ = *p++;
@@ -1261,12 +1266,12 @@ const char *mychan_get_mlock(mychan_t *mc)
 	if (mc->mlock_off)
 	{
 		if (dir != MTYPE_DEL)
-			dir = MTYPE_DEL, strcat(buf, "-");
-		strcat(buf, flags_to_string(mc->mlock_off));
+			dir = MTYPE_DEL, mowgli_strlcat(buf, "-", sizeof buf);
+		mowgli_strlcat(buf, flags_to_string(mc->mlock_off), sizeof buf);
 		if (mc->mlock_off & CMODE_LIMIT)
-			strcat(buf, "l");
+			mowgli_strlcat(buf, "l", sizeof buf);
 		if (mc->mlock_off & CMODE_KEY)
-			strcat(buf, "k");
+			mowgli_strlcat(buf, "k", sizeof buf);
 	}
 
 	if (md)
@@ -1736,6 +1741,13 @@ unsigned int chanacs_user_flags(mychan_t *mychan, user_t *u)
 		result |= chanacs_entity_flags(mychan, mt);
 
 	result |= chanacs_entity_flags_by_user(mychan, u);
+
+	/* the user is pending e-mail verification.  so, we want to filter out all flags
+	 * other than CA_AKICK (+b).  that way they have no effective access.  --kaniini
+	 */
+	if (u->myuser != NULL && (u->myuser->flags & MU_WAITAUTH))
+		result &= ~(ca_all & ~CA_AKICK);
+
 	result |= chanacs_host_flags_by_user(mychan, u);
 
 	slog(LG_DEBUG, "chanacs_user_flags(%s, %s): return %s", mychan->name, u->nick, bitmask_to_flags(result));
@@ -1768,7 +1780,7 @@ chanacs_t *chanacs_open(mychan_t *mychan, myentity_t *mt, const char *hostmask, 
 
 	/* wrt the second assert: only one of mu or hostmask can be not-NULL --nenolod */
 	return_val_if_fail(mychan != NULL, false);
-	return_val_if_fail((mt != NULL && hostmask == NULL) || (mt == NULL && hostmask != NULL), false); 
+	return_val_if_fail((mt != NULL && hostmask == NULL) || (mt == NULL && hostmask != NULL), false);
 
 	if (mt != NULL)
 	{
@@ -1841,10 +1853,11 @@ bool chanacs_modify_simple(chanacs_t *ca, unsigned int addflags, unsigned int re
 bool chanacs_change(mychan_t *mychan, myentity_t *mt, const char *hostmask, unsigned int *addflags, unsigned int *removeflags, unsigned int restrictflags, myentity_t *setter)
 {
 	chanacs_t *ca;
+	hook_channel_acl_req_t req;
 
 	/* wrt the second assert: only one of mu or hostmask can be not-NULL --nenolod */
 	return_val_if_fail(mychan != NULL, false);
-	return_val_if_fail((mt != NULL && hostmask == NULL) || (mt == NULL && hostmask != NULL), false); 
+	return_val_if_fail((mt != NULL && hostmask == NULL) || (mt == NULL && hostmask != NULL), false);
 	return_val_if_fail(addflags != NULL && removeflags != NULL, false);
 
 	if (mt != NULL)
@@ -1942,7 +1955,7 @@ static int expire_myuser_cb(myentity_t *mt, void *unused)
 	/* If they're logged in, update lastlogin time.
 	 * To decrease db traffic, may want to only do
 	 * this if the account would otherwise be
-	 * deleted. -- jilles 
+	 * deleted. -- jilles
 	 */
 	if (MOWGLI_LIST_LENGTH(&mu->logins) > 0)
 	{

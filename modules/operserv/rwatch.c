@@ -79,7 +79,10 @@ void _modinit(module_t *m)
 	f = fopen(path, "r");
 
 	if (f)
+	{
 		load_rwatchdb(path); /* because i'm lazy, let's pass path to the function */
+		fclose(f);
+	}
 	else
 	{
 		db_register_type_handler("RW", db_h_rw);
@@ -153,6 +156,9 @@ static void load_rwatchdb(char *path)
 	while (fgets(rBuf, BUFSIZE * 2, f))
 	{
 		item = strtok(rBuf, " ");
+		if (!item)
+			continue;
+
 		strip(item);
 
 		if (!strcmp(item, "RW"))
@@ -193,11 +199,21 @@ static void load_rwatchdb(char *path)
 	if ((srename(path, newpath)) < 0)
 	{
 		slog(LG_ERROR, "load_rwatchdb(): couldn't rename rwatch database.");
-		return;
+	}
+	else
+	{
+		slog(LG_INFO, "The RWATCH database has been converted to the OpenSEX format.");
+		slog(LG_INFO, "The old RWATCH database now resides in rwatch.db.old which may be deleted.");
 	}
 
-	slog(LG_INFO, "The RWATCH database has been converted to the OpenSEX format.");
-	slog(LG_INFO, "The old RWATCH database now resides in rwatch.db.old which may be deleted.");
+	if (rw != NULL)
+	{
+		free(rw->regex);
+		free(rw->reason);
+		if (rw->re != NULL)
+			regex_destroy(rw->re);
+		free(rw);
+	}
 }
 
 static void db_h_rw(database_handle_t *db, const char *type)
@@ -303,7 +319,7 @@ static void os_cmd_rwatch_add(sourceinfo_t *si, int parc, char *parv[])
 	rw->regex = sstrdup(pattern);
 	rw->reflags = flags;
 	rw->reason = sstrdup(reason);
-	rw->actions = RWACT_SNOOP;
+	rw->actions = RWACT_SNOOP | ((flags & AREGEX_KLINE) == AREGEX_KLINE ? RWACT_KLINE : 0);
 	rw->re = regex;
 
 	mowgli_node_add(rw, mowgli_node_create(), &rwatch_list);
@@ -537,7 +553,10 @@ static void rwatch_newuser(hook_user_nick_t *data)
 					slog(LG_VERBOSE, "rwatch_newuser(): klining *@%s (user %s!%s@%s matches %s %s)",
 							u->host, u->nick, u->user, u->host,
 							rw->regex, rw->reason);
-					kline_sts("*", "*", u->host, 86400, rw->reason);
+					if (! (u->flags & UF_KLINESENT)) {
+						kline_sts("*", "*", u->host, 86400, rw->reason);
+						u->flags |= UF_KLINESENT;
+					}
 				}
 			}
 			else if (rw->actions & RWACT_QUARANTINE)
@@ -603,7 +622,10 @@ static void rwatch_nickchange(hook_user_nick_t *data)
 					slog(LG_VERBOSE, "rwatch_nickchange(): klining *@%s (user %s -> %s!%s@%s matches %s %s)",
 							u->host, data->oldnick, u->nick, u->user, u->host,
 							rw->regex, rw->reason);
-					kline_sts("*", "*", u->host, 86400, rw->reason);
+					if (! (u->flags & UF_KLINESENT)) {
+						kline_sts("*", "*", u->host, 86400, rw->reason);
+						u->flags |= UF_KLINESENT;
+					}
 				}
 			}
 			else if (rw->actions & RWACT_QUARANTINE)

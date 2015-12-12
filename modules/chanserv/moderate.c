@@ -260,7 +260,7 @@ static void cs_cmd_activate(sourceinfo_t *si, int parc, char *parv[])
 	if (chansvs.deftemplates != NULL && *chansvs.deftemplates != '\0')
 		metadata_add(mc, "private:templates", chansvs.deftemplates);
 
-	if (MOWGLI_LIST_LENGTH(&mu->logins) > 0)
+	if (mu != NULL && MOWGLI_LIST_LENGTH(&mu->logins) > 0)
 	{
 		u = mu->logins.head->data;
 
@@ -304,7 +304,7 @@ static void cs_cmd_reject(sourceinfo_t *si, int parc, char *parv[])
 {
 	csreq_t *cs;
 	myuser_t *mu;
-	
+
 	if (!parv[0])
 	{
 		command_fail(si, fault_needmoreparams, STR_INSUFFICIENT_PARAMS, "REJECT");

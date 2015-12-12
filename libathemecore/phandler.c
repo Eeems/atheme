@@ -58,13 +58,18 @@ void (*holdnick_sts)(user_t *source, int duration, const char *nick, myuser_t *a
 void (*invite_sts) (user_t *source, user_t *target, channel_t *channel) = generic_invite_sts;
 void (*svslogin_sts) (char *target, char *nick, char *user, char *host, myuser_t *account) = generic_svslogin_sts;
 void (*sasl_sts) (char *target, char mode, char *data) = generic_sasl_sts;
+void (*sasl_mechlist_sts) (const char *mechlist) = generic_sasl_mechlist_sts;
 mowgli_node_t *(*next_matching_ban)(channel_t *c, user_t *u, int type, mowgli_node_t *first) = generic_next_matching_ban;
 mowgli_node_t *(*next_matching_host_chanacs)(mychan_t *mc, user_t *u, mowgli_node_t *first) = generic_next_matching_host_chanacs;
 bool (*is_valid_nick)(const char *nick) = generic_is_valid_nick;
 bool (*is_valid_host)(const char *host) = generic_is_valid_host;
+bool (*is_valid_username)(const char *username) = generic_is_valid_username;
 void (*mlock_sts)(channel_t *c) = generic_mlock_sts;
 void (*topiclock_sts)(channel_t *c) = generic_topiclock_sts;
 void (*quarantine_sts)(user_t *source, user_t *victim, long duration, const char *reason) = generic_quarantine_sts;
+bool (*is_extban)(const char *mask) = generic_is_extban;
+void (*dline_sts)(const char *server, const char *host, long duration, const char *reason) = generic_dline_sts;
+void (*undline_sts)(const char *server, const char *host) = generic_undline_sts;
 
 unsigned int generic_server_login(void)
 {
@@ -79,7 +84,17 @@ void generic_introduce_nick(user_t *u)
 
 void generic_wallops_sts(const char *text)
 {
-	slog(LG_INFO, "Don't know how to send wallops: %s", text);
+	/* ugly, but some ircds offer no alternative -- jilles */
+	user_t *u;
+	mowgli_patricia_iteration_state_t state;
+	char buf[BUFSIZE];
+
+	snprintf(buf, sizeof buf, "*** Notice -- %s", text);
+	MOWGLI_PATRICIA_FOREACH(u, &state, userlist)
+	{
+		if (!is_internal_client(u) && is_ircop(u))
+			notice_user_sts(NULL, u, buf);
+	}
 }
 
 void generic_join_sts(channel_t *c, user_t *u, bool isnew, char *modes)
@@ -134,7 +149,7 @@ void generic_notice_channel_sts(user_t *from, channel_t *target, const char *tex
 	slog(LG_INFO, "Cannot send notice to %s (%s): don't know how. Load a protocol module perhaps?", target->name, text);
 }
 
-void generic_wallchops(user_t *sender, channel_t *channel, const char *message)	
+void generic_wallchops(user_t *sender, channel_t *channel, const char *message)
 {
 	/* ugly, but always works -- jilles */
 	mowgli_node_t *n;
@@ -204,6 +219,16 @@ void generic_unqline_sts(const char *server, const char *mask)
 	/* cant do anything here. bail. */
 }
 
+void generic_dline_sts(const char *server, const char *host, long duration, const char *reason)
+{
+	/* can't do anything here. bail. */
+}
+
+void generic_undline_sts(const char *server, const char *host)
+{
+	/* can't do anything here. bail. */
+}
+
 void generic_topic_sts(channel_t *c, user_t *source, const char *setter, time_t ts, time_t prevts, const char *topic)
 {
 	/* cant do anything here. bail. */
@@ -253,12 +278,12 @@ void generic_fnc_sts(user_t *source, user_t *u, const char *newnick, int type)
 
 void generic_holdnick_sts(user_t *source, int duration, const char *nick, myuser_t *account)
 {
-	/* nothing to do here. */	
+	/* nothing to do here. */
 }
 
 void generic_invite_sts(user_t *source, user_t *target, channel_t *channel)
 {
-	/* nothing to do here. */	
+	/* nothing to do here. */
 }
 
 void generic_svslogin_sts(char *target, char *nick, char *user, char *host, myuser_t *account)
@@ -267,6 +292,11 @@ void generic_svslogin_sts(char *target, char *nick, char *user, char *host, myus
 }
 
 void generic_sasl_sts(char *target, char mode, char *data)
+{
+	/* nothing to do here. */
+}
+
+void generic_sasl_mechlist_sts(const char *mechlist)
 {
 	/* nothing to do here. */
 }
@@ -340,6 +370,19 @@ bool generic_is_valid_nick(const char *nick)
 	return true;
 }
 
+bool generic_is_valid_username(const char *username)
+{
+	const char *iter = username;
+
+	for (; *iter != '\0'; iter++)
+	{
+		if (!IsUserChar(*iter))
+			return false;
+	}
+
+	return true;
+}
+
 bool generic_is_valid_host(const char *host)
 {
 	/* don't know what to do here */
@@ -359,6 +402,11 @@ void generic_topiclock_sts(channel_t *c)
 void generic_quarantine_sts(user_t *source, user_t *victim, long duration, const char *reason)
 {
 	/* nothing to do here */
+}
+
+bool generic_is_extban(const char *mask)
+{
+	return false;
 }
 
 /* vim:cinoptions=>s,e0,n0,f0,{0,}0,^0,=s,ps,t0,c3,+s,(2s,us,)20,*30,gs,hs

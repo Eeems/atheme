@@ -28,7 +28,7 @@ static void do_chanuser_sync(mychan_t *mc, chanuser_t *cu, chanacs_t *ca,
 	int fl;
 	bool noop;
 
-	if (is_internal_client(cu->user))
+	if (is_internal_client(cu->user) || is_service(cu->user))
 		return;
 
 	if (ca != NULL && ca->entity != NULL && cu->user->myuser != NULL)
@@ -36,7 +36,7 @@ static void do_chanuser_sync(mychan_t *mc, chanuser_t *cu, chanacs_t *ca,
 		entity_chanacs_validation_vtable_t *vt;
 
 		vt = myentity_get_chanacs_validator(ca->entity);
-		if (vt->match_entity(ca, entity(cu->user->myuser)) == NULL)
+		if (vt->match_entity(ca, entity(cu->user->myuser)) == NULL && (!vt->match_user || vt->match_user(ca, cu->user) == NULL))
 			return;
 	}
 	fl = chanacs_user_flags(mc, cu->user);
@@ -48,10 +48,10 @@ static void do_chanuser_sync(mychan_t *mc, chanuser_t *cu, chanacs_t *ca,
 	if (take && !(fl & CA_ALLPRIVS) && (mc->flags & MC_RESTRICTED) && !has_priv_user(cu->user, PRIV_JOIN_STAFFONLY))
 	{
 		/* Stay on channel if this would empty it -- jilles */
-		if (mc->chan->nummembers <= (mc->flags & MC_GUARD ? 2 : 1))
+		if (mc->chan->nummembers - mc->chan->numsvcmembers == 1)
 		{
 			mc->flags |= MC_INHABIT;
-			if (!(mc->flags & MC_GUARD))
+			if (mc->chan->numsvcmembers == 0)
 				join(mc->chan->name, chansvs.nick);
 		}
 
@@ -77,10 +77,10 @@ static void do_chanuser_sync(mychan_t *mc, chanuser_t *cu, chanacs_t *ca,
 		metadata_t *md;
 
 		/* Stay on channel if this would empty it -- jilles */
-		if (mc->chan->nummembers <= (mc->flags & MC_GUARD ? 2 : 1))
+		if (mc->chan->nummembers - mc->chan->numsvcmembers == 1)
 		{
 			mc->flags |= MC_INHABIT;
-			if (!(mc->flags & MC_GUARD))
+			if (mc->chan->numsvcmembers == 0)
 				join(mc->chan->name, chansvs.nick);
 		}
 
@@ -252,7 +252,7 @@ static void sync_user(user_t *u)
 		chanuser_t *cu = iter->data;
 		mychan_t *mc;
 
-		mc = MYCHAN_FROM(cu->chan);
+		mc = mychan_from(cu->chan);
 		if (mc == NULL)
 			continue;
 

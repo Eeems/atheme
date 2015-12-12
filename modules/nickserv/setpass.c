@@ -80,28 +80,28 @@ static void ns_cmd_setpass(sourceinfo_t *si, int parc, char *parv[])
 	}
 
 	md = metadata_find(mu, "private:setpass:key");
-	if (md != NULL && crypt_verify_password(key, md->value) != NULL)
+	if (md == NULL || crypt_verify_password(key, md->value) == NULL)
 	{
-		logcommand(si, CMDLOG_SET, "SETPASS: \2%s\2", entity(mu)->name);
-		set_password(mu, password);
-		metadata_delete(mu, "private:setpass:key");
-		metadata_delete(mu, "private:sendpass:sender");
-		metadata_delete(mu, "private:sendpass:timestamp");
-
-
-		command_success_nodata(si, _("The password for \2%s\2 has been changed to \2%s\2."), entity(mu)->name, password);
-
+		if (md != NULL)
+			logcommand(si, CMDLOG_SET, "failed SETPASS (invalid key)");
+		command_fail(si, fault_badparams, _("Verification failed. Invalid key for \2%s\2."), entity(mu)->name);
 		return;
 	}
 
-	if (md != NULL)
-	{
-		logcommand(si, CMDLOG_SET, "failed SETPASS (invalid key)");
-	}
-	command_fail(si, fault_badparams, _("Verification failed. Invalid key for \2%s\2."), 
-		entity(mu)->name);
+	logcommand(si, CMDLOG_SET, "SETPASS: \2%s\2", entity(mu)->name);
 
-	return;
+	metadata_delete(mu, "private:setpass:key");
+	metadata_delete(mu, "private:sendpass:sender");
+	metadata_delete(mu, "private:sendpass:timestamp");
+
+	set_password(mu, password);
+	command_success_nodata(si, _("The password for \2%s\2 has been changed to \2%s\2."), entity(mu)->name, password);
+
+	if (mu->flags & MU_NOPASSWORD)
+	{
+		mu->flags &= ~MU_NOPASSWORD;
+		command_success_nodata(si, _("The \2%s\2 flag has been removed for account \2%s\2."), "NOPASSWORD", entity(mu)->name);
+	}
 }
 
 static void clear_setpass_key(user_t *u)
@@ -121,14 +121,16 @@ static void clear_setpass_key(user_t *u)
 
 static void show_setpass(hook_user_req_t *hdata)
 {
-	if (has_priv(hdata->si, PRIV_USER_AUSPEX)) {
+	if (has_priv(hdata->si, PRIV_USER_AUSPEX))
+	{
 		if (metadata_find(hdata->mu, "private:setpass:key"))
 			command_success_nodata(hdata->si, "%s has an active password reset key", entity(hdata->mu)->name);
 
 		metadata_t *md;
 		char strfbuf[BUFSIZE];
 
-		if (md = metadata_find(hdata->mu, "private:sendpass:sender")) {
+		if ((md = metadata_find(hdata->mu, "private:sendpass:sender")) != NULL)
+		{
 			const char *sender = md->value;
 			time_t ts;
 			struct tm tm;

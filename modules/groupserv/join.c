@@ -48,7 +48,7 @@ static void gs_cmd_join(sourceinfo_t *si, int parc, char *parv[])
 		else
 			invited = false;
 	}
-	
+
 	if (!(mg->flags & MG_OPEN) && !invited)
 	{
 		command_fail(si, fault_noprivs, _("Group \2%s\2 is not open to anyone joining."), parv[0]);
@@ -69,7 +69,7 @@ static void gs_cmd_join(sourceinfo_t *si, int parc, char *parv[])
 
 	if (MOWGLI_LIST_LENGTH(&mg->acs) > gs_config->maxgroupacs && (!(mg->flags & MG_ACSNOLIMIT)) && !invited)
         {
-                command_fail(si, fault_toomany, _("Group %s access list is full."), entity(mg)->name);
+                command_fail(si, fault_toomany, _("Group \2%s\2 access list is full."), entity(mg)->name);
                 return;
         }
 
@@ -78,7 +78,7 @@ static void gs_cmd_join(sourceinfo_t *si, int parc, char *parv[])
 	else
 		flags = gs_flags_parser(gs_config->join_flags, 0, flags);
 
-	ga = groupacs_add(mg, si->smu, flags);
+	ga = groupacs_add(mg, entity(si->smu), flags);
 
 	if (invited)
 		metadata_delete(si->smu, "private:groupinvite");

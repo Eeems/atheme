@@ -55,7 +55,7 @@ static time_t parse_age(char *s)
 	time_t duration;
 
 	duration = (atol(s) * 60);
-	while (isdigit(*s))
+	while (isdigit((unsigned char)*s))
 		s++;
 
 	if (*s == 'h' || *s == 'H')
@@ -111,7 +111,7 @@ static void process_parvarray(list_option_t *opts, size_t optsize, int parc, cha
 						*opts[j].optval.ageval = parse_age(parv[i + 1]);
 						i++;
 					}
-					break;					
+					break;
 				default:
 					break;
 				}

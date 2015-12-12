@@ -68,7 +68,7 @@ static void cs_cmd_ban(sourceinfo_t *si, int parc, char *parv[])
 		command_fail(si, fault_noprivs, _("You are not authorized to perform this operation."));
 		return;
 	}
-	
+
 	if (metadata_find(mc, "private:close:closer"))
 	{
 		command_fail(si, fault_noprivs, _("\2%s\2 is closed."), channel);
@@ -91,7 +91,7 @@ static void cs_cmd_ban(sourceinfo_t *si, int parc, char *parv[])
 			command_success_nodata(si, _("Banned \2%s\2 on \2%s\2."), target, channel);
 		return;
 	}
-	else if ((newtarget = pretty_mask(target)) && validhostmask(newtarget))
+	else if ((is_extban(target) && (newtarget = target)) || ((newtarget = pretty_mask(target)) && validhostmask(newtarget)))
 	{
 		modestack_mode_param(chansvs.nick, c, MTYPE_ADD, 'b', newtarget);
 		chanban_add(c, newtarget, 'b');

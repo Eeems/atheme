@@ -46,7 +46,7 @@ static void gs_cmd_invite(sourceinfo_t *si, int parc, char *parv[])
 		command_fail(si, fault_nosuch_target, _("The group \2%s\2 does not exist."), group);
 		return;
 	}
-	
+
 	if (!groupacs_sourceinfo_has_flag(mg, si, GA_INVITE))
 	{
 		command_fail(si, fault_noprivs, _("You are not authorized to perform this operation."));
@@ -59,7 +59,7 @@ static void gs_cmd_invite(sourceinfo_t *si, int parc, char *parv[])
 		return;
 	}
 
-	if ((ga = groupacs_find(mg, mu, 0)) != NULL)
+	if ((ga = groupacs_find(mg, entity(mu), 0, false)) != NULL)
 	{
 		command_fail(si, fault_badparams, _("\2%s\2 is already a member of \2%s\2."), user, group);
 		return;
@@ -82,13 +82,13 @@ static void gs_cmd_invite(sourceinfo_t *si, int parc, char *parv[])
 
 	if ((svs = service_find("memoserv")) != NULL)
 	{
-		snprintf(buf, BUFSIZE, "%s [auto memo] You have been invited to the group %s.", user, group);
+		snprintf(buf, BUFSIZE, "%s [auto memo] You have been invited to the group \2%s\2.", user, group);
 
 		command_exec_split(svs, si, "SEND", buf, svs->commands);
 	}
 	else
 	{
-		myuser_notice(si->service->nick, mu, "You have been invited to the group %s.", group);
+		myuser_notice(si->service->nick, mu, "You have been invited to the group \2%s\2.", group);
 	}
 
 	logcommand(si, CMDLOG_SET, "INVITE: \2%s\2 \2%s\2", group, user);

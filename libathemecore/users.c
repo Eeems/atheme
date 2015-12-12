@@ -81,8 +81,8 @@ void init_users(void)
  *     - if successful, a user is created and added to the users DTree.
  *     - if unsuccessful, a kill has been sent if necessary
  */
-user_t *user_add(const char *nick, const char *user, const char *host, 
-	const char *vhost, const char *ip, const char *uid, const char *gecos, 
+user_t *user_add(const char *nick, const char *user, const char *host,
+	const char *vhost, const char *ip, const char *uid, const char *gecos,
 	server_t *server, time_t ts)
 {
 	user_t *u, *u2;
@@ -636,6 +636,33 @@ const char *user_get_umodestr(user_t *u)
 			result[i++] = user_mode_list[iter].mode;
 	result[i] = '\0';
 	return result;
+}
+
+bool user_is_channel_banned(user_t *u, char ban_type)
+{
+	mowgli_node_t *n;
+
+	return_val_if_fail(u != NULL, false);
+	return_val_if_fail(ban_type != 0, false);
+
+	MOWGLI_ITER_FOREACH(n, u->channels.head)
+	{
+		chanuser_t *cu = n->data;
+
+		/* Assume that any prefix modes allow changing nicks even while banned */
+		if (cu->modes != 0)
+			continue;
+
+		if (next_matching_ban(cu->chan, u, ban_type, cu->chan->bans.head) != NULL)
+		{
+			if (ircd->except_mchar == '\0' || next_matching_ban(cu->chan, u, ircd->except_mchar, cu->chan->bans.head) == NULL)
+				return true;
+			else
+				continue;
+		}
+	}
+
+	return false;
 }
 
 /* vim:cinoptions=>s,e0,n0,f0,{0,}0,^0,=s,ps,t0,c3,+s,(2s,us,)20,*30,gs,hs
